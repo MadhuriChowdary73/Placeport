@@ -38,9 +38,10 @@ export async function POST(req: NextRequest) {
   }
 
   const userEmail = (user.email || '').toLowerCase().trim()
+  const isAdminPoster = userEmail === 'madhurichowdary2007@gmail.com'
 
-  // Verify Amrita student email
-  if (!userEmail.endsWith('@av.students.amrita.edu')) {
+  // Verify Amrita student email (admin is exempt)
+  if (!isAdminPoster && !userEmail.endsWith('@av.students.amrita.edu')) {
     return NextResponse.json(
       { error: 'Only verified Amrita student accounts can publish experiences.' },
       { status: 403 }
