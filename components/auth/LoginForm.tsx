@@ -53,7 +53,7 @@ export function LoginForm() {
           We sent a magic link to <strong className="text-gray-900 font-semibold">{email}</strong>. Click it to sign in.
         </p>
         <p className="text-[13px] text-gray-400 font-normal">The link expires in 1 hour.</p>
-        
+
         <div className="bg-[#FAF9F6] border border-[#E8E2D9] rounded-2xl p-4 text-[14px] text-gray-600 text-left space-y-1">
           <p className="font-semibold text-gray-800 flex items-center gap-1.5">
             <span>🔒</span> Verification Required
@@ -62,7 +62,7 @@ export function LoginForm() {
             Click the secure link in your Amrita inbox to verify your student email and access PlacePort.
           </p>
         </div>
-        
+
         <div className="pt-1 flex flex-col gap-3">
           <button
             type="button"
@@ -110,7 +110,7 @@ export function LoginForm() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@av.students.amrita.edu"
+            placeholder="av.sc.u4XXX@av.students.amrita.edu"
             disabled={loading}
             autoComplete="email"
             className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[16px] font-normal focus:outline-none focus:ring-2 focus:ring-[#A41D35] focus:border-transparent transition bg-gray-50/50 placeholder:text-gray-400 placeholder:font-light"
@@ -137,7 +137,7 @@ export function LoginForm() {
               <span>Sending link...</span>
             </>
           ) : (
-            'Send magic link'
+            'Send confirmation mail'
           )}
         </button>
       </form>
