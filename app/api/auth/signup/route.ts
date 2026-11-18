@@ -6,10 +6,11 @@ import type { Database } from '@/types/database'
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json()
-    const cleanEmail = (email || '').trim().toLowerCase()
+    const body = await req.json()
+    const email = (body?.email || '').trim().toLowerCase()
+    const password = body?.password || ''
 
-    if (!cleanEmail || !password) {
+    if (!email || !password) {
       return NextResponse.json({ ok: false, error: 'Email and password are required' }, { status: 400 })
     }
 
@@ -17,53 +18,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Password must be at least 6 characters' }, { status: 400 })
     }
 
-    const validation = validateEmail(cleanEmail)
+    const validation = validateEmail(email)
     if (!validation.valid) {
       return NextResponse.json({ ok: false, error: validation.error }, { status: 400 })
     }
 
-    const isAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase()
+    const isAdmin = email === ADMIN_EMAIL.toLowerCase()
+
+    // Students must have a parseable roll number
     let rollNumber = 'ADMIN'
     let branch = 'ADMIN'
     let batchYear = 24
 
     if (!isAdmin) {
-      const rollCheck = extractRollNumber(cleanEmail)
+      const rollCheck = extractRollNumber(email)
       if (!rollCheck.valid) {
         return NextResponse.json({ ok: false, error: rollCheck.error }, { status: 400 })
       }
-      const parsed = parseRollNumber(cleanEmail)
+      const parsed = parseRollNumber(email)
       rollNumber = parsed?.rollNumber || rollCheck.rollNumber
       branch = parsed?.branch || 'CSE'
       batchYear = parsed?.batchYear || 24
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    if (!url || !key) {
-      return NextResponse.json({ ok: false, error: 'Supabase configuration is missing' }, { status: 500 })
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ ok: false, error: 'Server configuration error' }, { status: 500 })
     }
 
-    const response = NextResponse.json({ ok: true })
+    // Collect cookies set by Supabase during signup/signin
+    const cookieStore: Array<{ name: string; value: string; options: Record<string, any> }> = []
 
-    const supabase = createServerClient<Database>(url, key, {
+    const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
       cookies: {
         getAll() {
           return req.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options)
-          })
+          cookiesToSet.forEach((c) => cookieStore.push(c))
         },
       },
     })
 
-    // Sign up student
+    // Create the account in Supabase Auth
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: password,
+      email,
+      password,
       options: {
         data: {
           roll_number: rollNumber,
@@ -73,45 +75,51 @@ export async function POST(req: NextRequest) {
     })
 
     if (signUpError) {
-      if (signUpError.message.toLowerCase().includes('already registered')) {
+      if (
+        signUpError.message.toLowerCase().includes('already registered') ||
+        signUpError.message.toLowerCase().includes('user already registered')
+      ) {
         return NextResponse.json(
-          { ok: false, error: 'An account with this email already exists. Please sign in.' },
+          { ok: false, error: 'An account with this email already exists. Please sign in instead.' },
           { status: 409 }
         )
       }
       return NextResponse.json({ ok: false, error: signUpError.message }, { status: 400 })
     }
 
-    // Attempt sign-in immediately to establish active session cookies
-    const { data: signInData } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: password,
+    // Immediately sign in to establish a session (cookies)
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     })
 
     const userId = signInData?.user?.id || signUpData?.user?.id
-    if (userId) {
-      try {
-        await (supabase.from('profiles' as any) as any).upsert({
-          id: userId,
-          email: cleanEmail,
-          roll_number: rollNumber,
-          branch: branch,
-          batch_year: batchYear,
-          role: isAdmin ? 'admin' : 'student',
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' })
-      } catch (err) {
-        console.error('[SignUp] Profile creation notice:', err)
-      }
+    if (!userId) {
+      return NextResponse.json(
+        { ok: false, error: 'Account created but could not establish session. Please sign in.' },
+        { status: 500 }
+      )
     }
 
-    const resData = { ok: true, role: isAdmin ? 'admin' : 'student' }
-    return new NextResponse(JSON.stringify(resData), {
-      status: 200,
-      headers: response.headers,
-    })
+    // Upsert profile row
+    await (supabase.from('profiles' as any) as any).upsert(
+      {
+        id: userId,
+        email,
+        roll_number: rollNumber,
+        branch,
+        batch_year: batchYear,
+        role: isAdmin ? 'admin' : 'student',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    )
+
+    const res = NextResponse.json({ ok: true, role: isAdmin ? 'admin' : 'student' })
+    cookieStore.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
+    return res
   } catch (err: any) {
-    console.error('[SignUpAPI] Error:', err)
-    return NextResponse.json({ ok: false, error: err.message || 'Internal signup error' }, { status: 500 })
+    console.error('[SignUpAPI] Unhandled error:', err)
+    return NextResponse.json({ ok: false, error: err.message || 'Internal server error' }, { status: 500 })
   }
 }

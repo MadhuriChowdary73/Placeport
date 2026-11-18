@@ -6,136 +6,137 @@ import type { Database } from '@/types/database'
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json()
-    const cleanEmail = (email || '').trim().toLowerCase()
+    const body = await req.json()
+    const email = (body?.email || '').trim().toLowerCase()
+    const password = body?.password || ''
 
-    if (!cleanEmail || !password) {
+    if (!email || !password) {
       return NextResponse.json({ ok: false, error: 'Email and password are required' }, { status: 400 })
     }
 
-    const validation = validateEmail(cleanEmail)
+    const validation = validateEmail(email)
     if (!validation.valid) {
       return NextResponse.json({ ok: false, error: validation.error }, { status: 400 })
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    if (!url || !key) {
-      return NextResponse.json({ ok: false, error: 'Supabase configuration is missing' }, { status: 500 })
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ ok: false, error: 'Server configuration error' }, { status: 500 })
     }
 
-    const response = NextResponse.json({ ok: true })
+    const isAdmin = email === ADMIN_EMAIL.toLowerCase()
 
-    const supabase = createServerClient<Database>(url, key, {
+    // Verify admin password before touching Supabase
+    if (isAdmin && password !== 'Madhuri_73') {
+      return NextResponse.json({ ok: false, error: 'Invalid credentials' }, { status: 401 })
+    }
+
+    // Build a response object we'll mutate with cookies
+    const cookieStore: Array<{ name: string; value: string; options: Record<string, any> }> = []
+
+    const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
       cookies: {
         getAll() {
           return req.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options)
-          })
+          cookiesToSet.forEach((c) => cookieStore.push(c))
         },
       },
     })
 
-    const isAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase()
-
-    // 1. Special Admin Handling
+    // --- ADMIN FLOW ---
     if (isAdmin) {
-      if (password !== 'Madhuri_73') {
-        return NextResponse.json({ ok: false, error: 'Invalid admin password' }, { status: 401 })
-      }
+      let { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
-      // Try signing in admin
-      let { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password,
-      })
-
-      // If admin user doesn't exist yet in Supabase Auth, register them
-      if (error && (error.message.includes('Invalid login') || error.message.includes('User not found'))) {
-        const signUpRes = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: password,
-          options: {
-            data: { roll_number: 'ADMIN', role: 'admin' },
-          },
+      // If admin doesn't exist in Supabase Auth yet, create them
+      if (error) {
+        console.log('[AdminLogin] signIn error:', error.message, '— attempting signUp')
+        const signUpResult = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { roll_number: 'ADMIN', role: 'admin' } },
         })
-        data = signUpRes.data as any
-        error = signUpRes.error
+        if (signUpResult.error) {
+          return NextResponse.json({ ok: false, error: signUpResult.error.message }, { status: 401 })
+        }
+        // Sign in again after creating
+        const retry = await supabase.auth.signInWithPassword({ email, password })
+        data = retry.data
+        if (retry.error) {
+          return NextResponse.json({ ok: false, error: retry.error.message }, { status: 401 })
+        }
       }
 
       const user = data?.user
-      if (user) {
-        // Ensure profile exists with role: 'admin'
-        try {
-          await (supabase.from('profiles' as any) as any).upsert({
-            id: user.id,
-            email: cleanEmail,
-            roll_number: 'ADMIN',
-            branch: 'ADMIN',
-            batch_year: 24,
-            role: 'admin',
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' })
-        } catch (err) {
-          console.error('[AdminLogin] Profile upsert notice:', err)
-        }
-
-        const resData = { ok: true, role: 'admin' }
-        return new NextResponse(JSON.stringify(resData), {
-          status: 200,
-          headers: response.headers,
-        })
+      if (!user) {
+        return NextResponse.json({ ok: false, error: 'Login failed — no user returned' }, { status: 401 })
       }
 
-      if (error) {
-        return NextResponse.json({ ok: false, error: error.message }, { status: 401 })
-      }
+      // Upsert admin profile
+      await (supabase.from('profiles' as any) as any).upsert(
+        {
+          id: user.id,
+          email,
+          roll_number: 'ADMIN',
+          branch: 'ADMIN',
+          batch_year: 24,
+          role: 'admin',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      )
+
+      // Build response and apply all session cookies
+      const res = NextResponse.json({ ok: true, role: 'admin' })
+      cookieStore.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
+      return res
     }
 
-    // 2. Student Sign In
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: password,
-    })
+    // --- STUDENT FLOW ---
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error || !data?.user) {
+      const msg = error?.message || 'Invalid credentials'
       return NextResponse.json(
-        { ok: false, error: 'Invalid email or password. Please verify your credentials or create an account.' },
+        {
+          ok: false,
+          error: msg.includes('Invalid login credentials')
+            ? 'Incorrect email or password. If you don\'t have an account, use "Create Account".'
+            : msg,
+        },
         { status: 401 }
       )
     }
 
     const user = data.user
-    const parsed = parseRollNumber(cleanEmail)
-    const fallback = extractRollNumber(cleanEmail)
-    const rollNumber = parsed?.rollNumber || (fallback.valid ? fallback.rollNumber : cleanEmail.split('@')[0].toUpperCase())
+    const parsed = parseRollNumber(email)
+    const fallback = extractRollNumber(email)
+    const rollNumber =
+      parsed?.rollNumber ||
+      (fallback.valid ? fallback.rollNumber : email.split('@')[0].toUpperCase())
 
-    // Ensure student profile is present
-    try {
-      await (supabase.from('profiles' as any) as any).upsert({
+    // Upsert student profile
+    await (supabase.from('profiles' as any) as any).upsert(
+      {
         id: user.id,
-        email: cleanEmail,
+        email,
         roll_number: rollNumber,
         branch: parsed?.branch || 'CSE',
         batch_year: parsed?.batchYear || 24,
         role: 'student',
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' })
-    } catch (err) {
-      console.error('[StudentLogin] Profile upsert notice:', err)
-    }
+      },
+      { onConflict: 'id' }
+    )
 
-    const resData = { ok: true, role: 'student' }
-    return new NextResponse(JSON.stringify(resData), {
-      status: 200,
-      headers: response.headers,
-    })
+    const res = NextResponse.json({ ok: true, role: 'student' })
+    cookieStore.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
+    return res
   } catch (err: any) {
-    console.error('[LoginAPI] Error:', err)
-    return NextResponse.json({ ok: false, error: err.message || 'Internal login error' }, { status: 500 })
+    console.error('[LoginAPI] Unhandled error:', err)
+    return NextResponse.json({ ok: false, error: err.message || 'Internal server error' }, { status: 500 })
   }
 }
