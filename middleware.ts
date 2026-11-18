@@ -5,13 +5,13 @@ export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const { pathname } = request.nextUrl
-  const isCallbackRoute =
-    pathname.startsWith('/auth/callback') || pathname.startsWith('/api/auth/callback')
-  const isSignOutRoute = pathname.startsWith('/api/auth/signout')
-  const isPublicLanding = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/verify')
+  const isAuthRoute =
+    pathname.startsWith('/auth') || pathname.startsWith('/api/auth')
+  const isPublicLanding =
+    pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/verify') || isAuthRoute
 
-  // Always let auth callback and signout routes pass through
-  if (isCallbackRoute || isSignOutRoute) {
+  // Always let auth routes and public landing pass through
+  if (isAuthRoute) {
     return supabaseResponse
   }
 
