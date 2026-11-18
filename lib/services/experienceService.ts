@@ -190,31 +190,32 @@ export async function createExperience(
       company_name: data.company_name,
       company_slug: slug,
       role: data.role,
-      year: data.year,
+      year: Number(data.year),
       campus: data.campus || 'Amaravati',
       branch: data.branch,
       outcome: data.outcome,
-      ctc_min: data.ctc_min || null,
-      ctc_max: data.ctc_max || null,
+      ctc_min: data.ctc_min ? Number(data.ctc_min) : null,
+      ctc_max: data.ctc_max ? Number(data.ctc_max) : null,
       overall_experience: data.overall_experience || null,
       preparation_tips: data.preparation_tips || null,
       advice: data.advice || null,
-      dos: (data.dos || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || ''),
-      donts: (data.donts || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || ''),
+      dos: (data.dos || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
+      donts: (data.donts || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
       resources: data.resources || [],
       rounds: data.rounds || [],
     })
-    .select('*, profiles!author_id(roll_number, email)')
+    .select('*')
     .single()
 
   if (error || !inserted) {
+    console.error('[createExperience] Supabase insert error:', error)
     throw error ?? new Error('Failed to create experience')
   }
 
   const exp = inserted as any
   return {
     ...exp,
-    author_roll_number: exp.profiles?.roll_number || 'Amrita Student',
+    author_roll_number: data.author_roll_number || exp.profiles?.roll_number || 'Amrita Student',
   } as Experience
 }
 

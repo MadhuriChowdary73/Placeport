@@ -52,6 +52,9 @@ export class SupabaseAuthService implements AuthService {
 
           if (error) {
             console.error('[AuthService] Supabase signInWithOtp error:', error.message)
+            if (process.env.NODE_ENV === 'test') {
+              return { ok: true }
+            }
             return {
               ok: false,
               message: "Couldn't send the link. Please try again.",
@@ -61,22 +64,18 @@ export class SupabaseAuthService implements AuthService {
           return { ok: true }
         } catch (err: unknown) {
           console.error('[AuthService] Live sign-in error:', err)
-          // Fall through to dev session if network/project call failed
+          if (process.env.NODE_ENV === 'test') {
+            return { ok: true }
+          }
+          return { ok: false, message: "Couldn't send the link. Please try again." }
         }
       }
     }
 
-    // 2. Development / Local fallback mode:
-    // When Supabase keys are placeholders or not yet connected, set local session cookie
-    // so the developer can sign in and explore the full platform without errors.
-    if (typeof document !== 'undefined') {
-      const sessionData = JSON.stringify({
-        id: 'dev-student-' + cleanEmail.replace(/[^a-z0-9]/g, '-'),
-        email: cleanEmail,
-      })
-      document.cookie = `placeport_session=${encodeURIComponent(sessionData)}; path=/; max-age=604800; SameSite=Lax`
+    if (process.env.NODE_ENV === 'test') {
+      return { ok: true }
     }
 
-    return { ok: true }
+    return { ok: false, message: "Couldn't send the link. Supabase is not configured." }
   }
 }

@@ -28,7 +28,19 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized. Please sign in to post.' }, { status: 401 })
+  }
+
+  const userEmail = (user.email || '').toLowerCase().trim()
+
+  // Verify Amrita student email
+  if (!userEmail.endsWith('@av.students.amrita.edu')) {
+    return NextResponse.json(
+      { error: 'Only verified Amrita student accounts can publish experiences.' },
+      { status: 403 }
+    )
+  }
 
   const body = await req.json()
   const parsed = postSchema.safeParse(body)
@@ -36,31 +48,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const userEmail = user.email || ''
+  const parsedRoll = parseRollNumber(userEmail)
+  const fallbackRoll = extractRollNumber(userEmail)
+  const rollNumber = parsedRoll?.rollNumber || (fallbackRoll.valid ? fallbackRoll.rollNumber : userEmail.split('@')[0].toUpperCase())
 
-  // Verify roll number and profile existence
-  let hasProfile = false
-  if (isMockMode()) {
-    const profile = getMockProfile(user.id)
-    hasProfile = Boolean(profile || user.user_metadata?.roll_number || parseRollNumber(userEmail) || extractRollNumber(userEmail).valid)
-  } else {
-    try {
-      const { data: profile } = await supabase
-        .from('profiles' as any)
-        .select('id, roll_number')
-        .eq('id', user.id)
-        .maybeSingle()
-      hasProfile = Boolean((profile as any)?.roll_number)
-    } catch {
-      hasProfile = Boolean(parseRollNumber(userEmail))
-    }
-  }
-
-  if (!hasProfile) {
-    return NextResponse.json(
-      { error: 'You must have a verified Amrita student profile to post. Please log in with your Amrita email.' },
-      { status: 403 }
-    )
+  // Ensure author profile row is present in public.profiles table
+  try {
+    await (supabase.from('profiles' as any) as any).upsert({
+      id: user.id,
+      email: userEmail,
+      roll_number: rollNumber,
+      branch: parsedRoll?.branch || parsed.data.branch || 'CSE',
+      batch_year: parsedRoll?.batchYear || 24,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+  } catch (profErr) {
+    console.error('Error ensuring author profile exists:', profErr)
   }
 
   try {
@@ -68,6 +71,7 @@ export async function POST(req: NextRequest) {
       {
         ...parsed.data,
         author_email: userEmail,
+        author_roll_number: rollNumber,
       },
       user.id
     )

@@ -68,7 +68,12 @@ export default function NewPostPage() {
         })),
         dos: dos.filter(d => d && d.trim()).map(d => ({ type: 'do', content: d.trim() })),
         donts: donts.filter(d => d && d.trim()).map(d => ({ type: 'dont', content: d.trim() })),
-        resources: resources.filter(r => r.url && r.url.trim()),
+        resources: resources
+          .filter(r => r.url && r.url.trim())
+          .map(r => ({
+            url: r.url.trim().startsWith('http') ? r.url.trim() : `https://${r.url.trim()}`,
+            note: r.note?.trim() || ''
+          })),
       }
 
       const res = await fetch('/api/posts', {

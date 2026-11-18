@@ -54,20 +54,23 @@ export function LoginForm() {
         </p>
         <p className="text-[13px] text-gray-400 font-normal">The link expires in 1 hour.</p>
         
-        <div className="pt-2 flex flex-col gap-3">
-          <a
-            href={`/auth/callback?code=dev-access&email=${encodeURIComponent(email)}`}
-            className="w-full bg-[#A41D35] hover:bg-[#8A152A] text-white text-[15px] font-bold py-3 px-5 rounded-xl transition text-center block shadow-sm tracking-wide"
-          >
-            Open link &amp; enter PlacePort →
-          </a>
+        <div className="bg-[#FAF9F6] border border-[#E8E2D9] rounded-2xl p-4 text-[14px] text-gray-600 text-left space-y-1">
+          <p className="font-semibold text-gray-800 flex items-center gap-1.5">
+            <span>🔒</span> Verification Required
+          </p>
+          <p className="text-[13px] text-gray-600 leading-normal">
+            Click the secure link in your Amrita inbox to verify your student email and access PlacePort.
+          </p>
+        </div>
+        
+        <div className="pt-1 flex flex-col gap-3">
           <button
             type="button"
             onClick={() => {
               setSent(false)
               setError(null)
             }}
-            className="text-[14px] text-gray-500 hover:text-gray-800 font-medium underline"
+            className="w-full bg-[#FDF2F4] hover:bg-[#FBE5E9] text-[#A41D35] text-[14px] font-semibold py-2.5 px-4 rounded-xl border border-[#F5D0D7] transition"
           >
             Use a different email
           </button>
