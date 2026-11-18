@@ -1,170 +1,150 @@
-# PlacePort (PlacementHub) 🎓
+# PlacePort 🎓
 
-> **A login-only placement interview sharing platform exclusively for Amrita Vishwa Vidyapeetham students.**
+> **A login-only placement experience platform exclusively for Amrita Vishwa Vidyapeetham, Amaravati campus students.**
 
-PlacePort allows Amrita students who have attended placement interviews (both selected and rejected) to share organized suggestions, interview flow timelines, verified resources, and authentic do's & don'ts to help fellow students prepare better.
+PlacePort lets Amaravati students who have attended placement interviews (selected or not) share organized round-by-round experiences, verified resources, and honest do's and don'ts, so their juniors and peers can prepare better.
+
+🔗 **Live:** _add your Vercel link here_
 
 ---
 
 ## 🚀 Key Features
 
-### 1. Access & Identity Protection
-- **Exclusive Domain Access**: Strictly restricted to `@cb.students.amrita.edu` (configurable via `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN`) with magic link / OTP verification.
-- **Login-Only Perimeter**: Every single route requires authentication; nothing is public or indexable by search engines.
-- **Roll Number Display Modes**: Contributors choose how they appear on posts:
-  - `full`: Shows full roll number (e.g. `CB.EN.U4CSE21001`)
-  - `masked`: Automatically masks digits (e.g. `CB.EN.U4CSE21XXX`)
-  - `anon`: Anonymous handle (e.g. `@silentcoder`)
-- **Privacy Enforcement**: Roll numbers are stripped at the database/view layer (`posts_public`). Only verified admins can view real identities.
+### 1. Access and Verified Identity
+- **Amaravati-only access**: Sign-in is restricted to `@av.students.amrita.edu` emails through a passwordless magic link. Other domains, including Gmail, are rejected.
+- **Login-only**: Every page requires authentication, and nothing is public.
+- **Roll number from your college email**: Emails follow the format `av.sc.u4cse2xxxx@av.students.amrita.edu`. The roll number (e.g. `AV.SC.U4CSE24106`), branch and batch year are read from the email, saved to your profile on first login, and cannot be edited.
+- **Verified authorship**: Every post shows the author's roll number from their verified profile. Nobody can post under someone else's roll number, and this is enforced in the database.
 
-### 2. Interview Flow Builder
-- Add any combination of rounds: **OA, GD, Aptitude, Coding, Technical, Case Study, Managerial, HR, or Custom**.
-- **Drag-to-Reorder**: Interactive drag-and-drop timeline powered by `@dnd-kit`.
-- Per-round metadata: Questions asked, difficulty rating (1–5), duration in minutes, and actionable tips.
-- Structured lists for **Do's & Don'ts** and **Useful Resources** (URL + note).
-- Single-line summary advice: *"If I were you, I'd..."*
+### 2. Share Your Experience
+- Company, role, year, branch, package range (LPA) and outcome (`selected`, `rejected`, `waitlisted`, `no_offer`).
+- **Round builder**: Add rounds in any order (Online Assessment, GD, Technical, HR, or your own) and drag them to reorder. Each round has its own details.
+- Structured **Do's**, **Don'ts** and **Helpful Resources** (links).
+- Overall experience and preparation tips.
 
-### 3. Browsing & Company Insights
-- **Multi-parameter Filtering**: Filter by company, year, role, campus, branch, outcome (`selected`, `rejected`, `waitlisted`), and sort by **Most Helpful** or **Newest**.
-- **Company Summary Pages**: Aggregate view of company interview flows, computed top common round sequences, top do's/don'ts, and top preparation resources.
-- **Ranked Resources**: Central repository of student-vetted interview resources ranked by helpful votes.
-- **Personal Bookmarks**: Save posts to your personal list for quick offline revision.
+### 3. Browse and Learn
+- **Feed**: Compact cards showing company, role, outcome, year, branch, package, rounds and a short summary.
+- **Detail page** (`/experiences/[id]`): Opens the full experience with every round in order, the do's and don'ts, resources, author and date.
+- **Filters**: Search, company, branch, year, outcome, and sort by most recent or most helpful. Filters are kept in the URL, so refreshing the page or sharing a link keeps them.
+- **Helpful votes and saves**: Mark posts as helpful and bookmark them for later.
 
-### 4. Motivation & Gamification (Anti-Spam)
-- **"Helped X Students" Counter**: Counts unique users who marked a post helpful or bookmarked it.
-- **Merit Badges** (awarded on helpful impact, not post count):
-  - 🏆 **First Post**: Shared first interview experience.
-  - 💪 **Rejection Lessons**: Helpful advice on a rejected interview outcome (≥ 5 helpful votes).
-  - 📚 **Resource Hero**: Post with 5+ resources and ≥ 10 helpful votes.
-  - 🏢 **Company Expert**: 3+ detailed experiences for the same company.
-  - ⭐ **Top Helper**: Helped 50+ unique students across posts.
-  - ✨ **Fresh Insight**: First post for a company in the active placement year.
-- **Milestone Notifications**: In-app notifications when reaching helpfulness milestones and receiving badges.
+### 4. Roadmap
+- Merit badges and a "helped X students" counter
+- Company summary pages with common round flows
+- Ranked resources catalog
+- Report and moderation dashboard for admins
+- In-app notifications
 
-### 5. Moderation & Trust
-- In-app **Report Dialog** on all posts.
-- **Admin Review Dashboard**: Dedicated `/admin/reports` to inspect flagged content and resolve/dismiss or delete posts.
-- **User Role Management**: Dedicated `/admin/users` to view real roll numbers and manage admin privileges.
-- Built-in reminder against posting confidential or NDA-violating question papers.
+> Please don't post confidential company material or question papers covered by an NDA. Share experiences and preparation advice only.
 
 ---
 
 ## 🛠 Tech Stack
 
 - **Framework**: Next.js 16 (App Router) with TypeScript
-- **Styling & UI**: Tailwind CSS v4, shadcn/ui, Lucide Icons
-- **State & Data Fetching**: TanStack React Query v5
-- **Form Management**: React Hook Form + Zod
-- **Drag & Drop**: @dnd-kit/core & @dnd-kit/sortable
-- **Database & Auth**: Supabase (PostgreSQL with Row Level Security & Triggers)
+- **Styling and UI**: Tailwind CSS v4, shadcn/ui, Lucide Icons
+- **Data fetching**: TanStack React Query v5
+- **Forms**: React Hook Form + Zod
+- **Drag and drop**: @dnd-kit/core and @dnd-kit/sortable
+- **Database and Auth**: Supabase (PostgreSQL, Row Level Security, magic link auth)
 - **Testing**: Vitest, React Testing Library, Playwright
-- **CI/CD**: GitHub Actions
+- **Hosting**: Vercel
 
 ---
 
-## 📁 Project Structure
+## 🧱 Architecture
+
+The code is layered so each part has one job:
+
+- **UI components** only render. They never call Supabase directly.
+- **`lib/auth`**: An `AuthService` interface with one Supabase implementation, so the auth provider can be swapped in one place.
+- **`lib/services`**: `experienceService` and `profileService` are the only files that talk to the database.
+- **`lib/validation.ts`**: Email checks and `parseRollNumber()`, which turns an Amrita email into a roll number, branch and batch year.
+- **`lib/config.ts`**: Constants such as the allowed email domain and the campus name.
+- **`lib/types.ts`**: Shared types (`Experience`, `Round`, `Profile`).
 
 ```
 placeport/
-├── app/
-│   ├── (auth)/
-│   │   └── login/                  # Amrita email OTP / Magic link
-│   ├── (app)/
-│   │   ├── layout.tsx              # Authenticated shell & navigation
-│   │   ├── feed/                   # Main placement experiences feed
-│   │   ├── post/
-│   │   │   ├── new/                # Interactive submission + flow builder
-│   │   │   └── [id]/               # Experience detail with timeline
-│   │   ├── company/[slug]/         # Company aggregate view & common flow
-│   │   ├── resources/              # Ranked resources catalog
-│   │   ├── saved/                  # Saved / bookmarked posts
-│   │   ├── profile/[handle]/       # Contributor profile & badges
-│   │   └── notifications/          # Milestone & badge notifications
-│   ├── admin/
-│   │   ├── layout.tsx              # Admin-only route guard
-│   │   ├── reports/                # Report review dashboard
-│   │   └── users/                  # User identity & role management
-│   └── api/                        # Next.js Route Handlers
-│       ├── posts/
-│       ├── companies/
-│       ├── votes/
-│       ├── saves/
-│       ├── resources/
-│       ├── badges/
-│       ├── reports/
-│       ├── notifications/
-│       └── admin/
-├── components/
-│   ├── post/
-│   │   ├── FlowBuilder.tsx         # Drag-to-reorder round builder
-│   │   ├── RoundTimeline.tsx       # Timeline visualizer
-│   │   ├── PostCard.tsx            # Feed card
-│   │   ├── PostFilters.tsx         # Multi-criteria filter controls
-│   │   └── PostActions.tsx         # Vote, save, report modal
-│   └── ui/                         # shadcn UI components
+├── app/               # Routes: login, feed, share, experience detail, auth callback
+├── components/        # LoginForm, ExperienceCard, ExperienceDetail, RoundList, RoundEditor, ui/
 ├── lib/
-│   ├── supabase/                   # SSR & browser Supabase clients
-│   ├── validations/                # Zod schemas for auth & posts
-│   ├── hooks/                      # TanStack query hooks
-│   └── utils.ts                    # Roll number masking, CTC & date helpers
-├── supabase/
-│   ├── migrations/                 # Full SQL schema, RLS, triggers & views
-│   └── seed.sql                    # Initial seed data for companies
-└── e2e/ & __tests__/               # Playwright & Vitest test suites
+│   ├── auth/          # AuthService interface + Supabase implementation
+│   ├── services/      # experienceService, profileService
+│   ├── validation.ts  # email + roll number parsing
+│   ├── config.ts      # allowed domain, campus
+│   └── types.ts
+├── types/             # Generated database types
+└── __tests__/         # Unit and e2e tests
 ```
 
 ---
 
 ## ⚙️ Getting Started
 
-### 1. Environment Setup
-
-Copy `.env.local.example` to `.env.local` inside `placeport/`:
+### 1. Clone and install
 
 ```bash
-cp .env.local.example .env.local
+git clone https://github.com/MadhuriChowdary73/Placeport.git
+cd Placeport
+npm install --legacy-peer-deps
 ```
 
-Fill in your Supabase credentials:
+### 2. Environment variables
+
+Create `.env.local` in the project root:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN=cb.students.amrita.edu
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-key
 ```
 
-### 2. Database Migration
+Use the **publishable** (anon) key from Supabase → Project Settings → API Keys. Never put the secret or `service_role` key in this app, and never commit `.env.local`.
 
-Run the SQL migration in `supabase/migrations/001_initial_schema.sql` inside your Supabase project dashboard (SQL Editor) or via the Supabase CLI:
+### 3. Database setup
+
+Run the SQL setup script in Supabase → **SQL Editor**. It creates:
+
+| Object | Purpose |
+|---|---|
+| `profiles` | One row per verified student (roll number, branch, batch year) |
+| `experiences` | Posts, with rounds, do's, don'ts and resources stored as structured fields |
+| `saves` | Bookmarks |
+| `helpful_votes` | Helpful votes, which update `helpful_count` through a trigger |
+| `experiences_with_author` | A view that adds the author's roll number (no emails exposed) |
+
+### 4. Supabase auth settings
+
+In Supabase → **Authentication → URL Configuration**:
+
+- **Site URL**: `http://localhost:3000` (use your live link in production)
+- **Redirect URLs**: `http://localhost:3000/auth/callback` and `https://your-live-link/auth/callback`
+
+For real use, set up custom SMTP under **Authentication → Emails → SMTP Settings**, because Supabase's built-in email has a low hourly limit.
+
+### 5. Run
 
 ```bash
-supabase db push
-```
-
-### 3. Install & Run
-
-```bash
-# Install dependencies
-npm install --legacy-peer-deps
-
-# Run unit tests
-npm test
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
+npm run dev      # development at http://localhost:3000
+npm test         # unit tests
+npm run build    # production build
+npm start        # run the production build
 ```
 
 ---
 
-## 🔒 Security & Privacy Architecture
+## 🚢 Deployment (Vercel)
 
-- **Row Level Security (RLS)** is enabled on all tables (`posts`, `rounds`, `dos_donts`, `resources`, `votes`, `saves`, `profiles`, `reports`, `notifications`).
-- Unauthenticated requests are rejected by Edge Middleware before reaching application code.
-- Public views (`posts_public`) automatically apply string masking: `regexp_replace(roll_number, '[0-9]{3}$', 'XXX')` or `@handle` depending on user preference.
-- Real identities and raw roll numbers are accessible **only** to accounts with `role = 'admin'` via protected routes.
+1. Push the repo to GitHub.
+2. Import it in Vercel and add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as environment variables.
+3. Deploy, then add the live URL and `/auth/callback` to Supabase's Site URL and Redirect URLs.
+
+---
+
+## 🔒 Security and Privacy
+
+- **Row Level Security** is enabled on every table.
+- Only users whose verified email ends with `@av.students.amrita.edu` can create profiles, posts, saves or votes.
+- A profile's roll number must match its verified email, which the database checks. Profiles are read-only after creation, so roll numbers can't be changed or spoofed.
+- Users can edit or delete only their own posts, and posts are always created for the Amaravati campus.
+- The author view runs with the viewer's permissions (`security_invoker`) and exposes no email addresses.
+- Anonymous visitors have no access to any data.
