@@ -1,9 +1,9 @@
-import { ALLOWED_EMAIL_DOMAIN } from './config'
+import { ALLOWED_EMAIL_DOMAIN, ADMIN_EMAIL } from './config'
 
 /**
  * Validate an email address.
  * - Must be non-empty and match standard format.
- * - Must belong to the allowed Amrita student domain.
+ * - Must belong to the allowed Amrita student domain or be the designated admin email.
  */
 export function validateEmail(email: string): { valid: boolean; error?: string } {
   const trimmed = email.trim()
@@ -18,7 +18,12 @@ export function validateEmail(email: string): { valid: boolean; error?: string }
     return { valid: false, error: 'Please enter a valid email address' }
   }
 
-  // Domain restriction
+  // Allow designated admin email
+  if (trimmed.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+    return { valid: true }
+  }
+
+  // Domain restriction for students
   const domain = trimmed.split('@')[1]?.toLowerCase()
   if (domain !== ALLOWED_EMAIL_DOMAIN) {
     return { valid: false, error: 'Please use your Amrita student email' }
@@ -40,7 +45,17 @@ export interface ParsedRollNumber {
  * Example: av.sc.u4cse24123 becomes AV.SC.U4CSE24123
  */
 export function parseRollNumber(email: string): ParsedRollNumber | null {
-  const local = email.trim().split('@')[0]
+  const clean = email.trim().toLowerCase()
+  if (clean === ADMIN_EMAIL.toLowerCase()) {
+    return {
+      rollNumber: 'ADMIN',
+      branch: 'ADMIN',
+      batchYear: 24,
+      serial: '000',
+    }
+  }
+
+  const local = clean.split('@')[0]
   if (!local) return null
 
   const upper = local.toUpperCase()
@@ -62,25 +77,16 @@ export function parseRollNumber(email: string): ParsedRollNumber | null {
 
 /**
  * Extract and validate a roll number from an Amrita student email.
- *
- * Amrita email local parts follow formats like:
- *   av.sc.u4cse21001  → AV.SC.U4CSE21001  (compact)
- *   av.sc.u4.cse.21001 → AV.SC.U4.CSE.21001 (dotted)
- *
- * Both are normalized to: AV.SC.U4.CSE.21001  (the dotted canonical form).
- *
- * Pattern: <campus>.<school>.U4<branch><batch><seq>
- *   campus: 2-letter (AV, CB, BL, etc.)
- *   school: 2-letter (SC, EN, etc.)
- *   U4: constant prefix for B.Tech
- *   branch: 2-4 letters (CSE, AIE, ECE, ME, etc.)
- *   batch: 2 digits (year)
- *   seq: 3+ digits (sequence number)
  */
 export function extractRollNumber(
   email: string
 ): { valid: true; rollNumber: string } | { valid: false; error: string } {
-  const local = email.trim().split('@')[0]
+  const clean = email.trim().toLowerCase()
+  if (clean === ADMIN_EMAIL.toLowerCase()) {
+    return { valid: true, rollNumber: 'ADMIN' }
+  }
+
+  const local = clean.split('@')[0]
   if (!local) {
     return { valid: false, error: "We couldn't read a roll number from this email." }
   }

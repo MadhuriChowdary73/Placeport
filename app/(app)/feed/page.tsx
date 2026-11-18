@@ -16,6 +16,7 @@ function FeedContent() {
   const { data, isLoading } = usePosts(filters)
   const posts = data?.posts ?? []
   const total = data?.total ?? 0
+  const isAdmin = (data as any)?.isAdmin ?? false
 
   return (
     <div className="space-y-6">
@@ -62,7 +63,7 @@ function FeedContent() {
       ) : (
         <div className="grid gap-4">
           {posts.map((post: any) => (
-            <ExperienceCard key={post.id} post={post} />
+            <ExperienceCard key={post.id} post={post} isAdmin={isAdmin} />
           ))}
         </div>
       )}

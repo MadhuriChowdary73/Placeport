@@ -59,6 +59,7 @@ export interface Experience {
   overall_experience: string
   preparation_tips: string
   advice: string
+  is_published?: boolean
   created_at: string
   vote_count: number
   report_count: number

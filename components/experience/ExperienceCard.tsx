@@ -1,8 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ThumbsUp, Bookmark, Building2, Calendar, MapPin, GitBranch } from 'lucide-react'
+import { ThumbsUp, Bookmark, Building2, Calendar, MapPin, GitBranch, Eye, EyeOff, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { useVote, useSave } from '@/lib/hooks/useVote'
@@ -11,18 +12,58 @@ import type { Experience } from '@/lib/types'
 
 interface ExperienceCardProps {
   post: Experience | any
+  isAdmin?: boolean
 }
 
-export function ExperienceCard({ post }: ExperienceCardProps) {
+export function ExperienceCard({ post, isAdmin = false }: ExperienceCardProps) {
   const router = useRouter()
   const { voted, toggleVote, isPending: votePending } = useVote(post.id)
   const { saved, toggleSave, isPending: savePending } = useSave(post.id)
 
+  const [isPublished, setIsPublished] = useState<boolean>(post.is_published !== false)
+  const [toggling, setToggling] = useState(false)
+  const [deleted, setDeleted] = useState(false)
+
   const displayName = post.author_roll_number || post.display_name || 'Amrita Student'
   const summaryText = post.overall_experience || post.advice || ''
 
+  async function handleToggleStatus(e: React.MouseEvent) {
+    e.stopPropagation()
+    e.preventDefault()
+    setToggling(true)
+    try {
+      const res = await fetch(`/api/admin/posts/${post.id}/toggle`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        setIsPublished(data.is_published)
+      }
+    } catch (err) {
+      console.error('Failed to toggle post visibility:', err)
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  async function handleDeletePost(e: React.MouseEvent) {
+    e.stopPropagation()
+    e.preventDefault()
+    if (!confirm('Are you sure you want to delete this experience?')) return
+
+    try {
+      const res = await fetch(`/api/admin/posts/${post.id}/delete`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        setDeleted(true)
+      }
+    } catch (err) {
+      console.error('Failed to delete post:', err)
+    }
+  }
+
   function handleCardClick(e: React.MouseEvent) {
-    // If the click was on an interactive element (button, link), let it handle its own event
     const target = e.target as HTMLElement
     if (target.closest('button') || target.closest('a')) {
       return
@@ -30,11 +71,65 @@ export function ExperienceCard({ post }: ExperienceCardProps) {
     router.push(`/experiences/${post.id}`)
   }
 
+  if (deleted) return null
+
   return (
     <Card
       onClick={handleCardClick}
-      className="hover:shadow-md hover:border-[#A41D35]/30 transition-all cursor-pointer group border-[#E8E2D9] bg-white p-1"
+      className={cn(
+        'hover:shadow-md hover:border-[#A41D35]/30 transition-all cursor-pointer group border-[#E8E2D9] bg-white p-1 relative',
+        !isPublished && 'border-amber-300 bg-amber-50/20'
+      )}
     >
+      {/* Admin Moderation Bar (ONLY visible to Admin) */}
+      {isAdmin && (
+        <div className="bg-gray-100/90 border-b border-gray-200 px-4 py-2 flex items-center justify-between text-xs rounded-t-xl">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-700 uppercase tracking-wider">Admin Control:</span>
+            {isPublished ? (
+              <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span> Live on Feed
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span> Hidden from Feed
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleToggleStatus}
+              disabled={toggling}
+              className={cn(
+                'px-2.5 py-1 rounded font-semibold flex items-center gap-1 transition',
+                isPublished
+                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+              )}
+            >
+              {isPublished ? (
+                <>
+                  <EyeOff className="w-3.5 h-3.5" /> Hide from Feed
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5" /> Show on Feed
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleDeletePost}
+              className="p-1 rounded text-red-600 hover:bg-red-50 transition"
+              title="Delete Experience"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">

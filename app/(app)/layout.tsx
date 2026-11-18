@@ -4,12 +4,14 @@ import { createClient } from '@/lib/supabase/server'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect('/')
+
+  const isAdmin = user.email?.toLowerCase() === 'madhurichowdary2007@gmail.com'
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-gray-900 flex flex-col justify-between">
       <div>
-        <Nav />
+        <Nav isAdmin={isAdmin} userEmail={user.email || ''} />
         <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
           {children}
         </main>
@@ -34,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   )
 }
 
-function Nav() {
+function Nav({ isAdmin, userEmail }: { isAdmin: boolean; userEmail: string }) {
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-[#E8E2D9] shadow-xs">
       {/* Top accent stripe — MyAmrita identity bar */}
@@ -54,9 +56,14 @@ function Nav() {
               <span className="text-[11px] font-bold tracking-widest px-2 py-[2px] rounded-md bg-[#FDF2F4] text-[#A41D35] border border-[#F5D0D7] uppercase">
                 AMARAVATI
               </span>
+              {isAdmin && (
+                <span className="text-[11px] font-extrabold tracking-wider px-2 py-[2px] rounded-md bg-[#A41D35] text-white uppercase shadow-xs">
+                  ADMIN
+                </span>
+              )}
             </div>
             <p className="text-[13px] text-gray-500 font-semibold tracking-wide">
-              Amaravati Campus
+              {isAdmin ? `Administrator (${userEmail})` : 'Amaravati Campus'}
             </p>
           </div>
         </a>

@@ -1,6 +1,4 @@
 import { LoginForm } from '@/components/auth/LoginForm'
-import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -8,12 +6,7 @@ export const metadata: Metadata = {
   description: 'Placement interview experiences, preparation insights, and resources for Amrita Amaravati students.',
 }
 
-export default async function HomePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const rollNumber = user?.user_metadata?.roll_number || user?.email?.split('@')[0]?.toUpperCase()
-
+export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col justify-between bg-[#FAF9F6]">
       {/* Top Brand Stripe */}
@@ -57,44 +50,9 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* Right: Auth Form or Authenticated Entry */}
+          {/* Right: Auth Form (Always clean, no pre-filled or cached defaults) */}
           <div className="flex items-center justify-center">
-            {user ? (
-              <div className="bg-white rounded-3xl shadow-xl border border-[#E8E2D9] p-8 sm:p-10 max-w-md w-full text-center space-y-6">
-                <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#A41D35] shadow-xs">
-                  <img src="/amrita-logo.png" alt="Amrita Vishwa Vidyapeetham" className="h-12 w-auto object-contain" />
-                </div>
-                <div>
-                  <div className="text-[26px] font-bold text-[#A41D35] tracking-tight">PlacePort</div>
-                  <p className="text-[12px] uppercase tracking-[0.14em] text-[#D4AF37] font-bold mt-1">
-                    Amaravati Campus Portal
-                  </p>
-                </div>
-
-                <div className="bg-[#FDF2F4] border border-[#F5D0D7] rounded-2xl p-4 text-left space-y-1">
-                  <div className="text-xs text-[#A41D35] font-bold uppercase tracking-wider">Signed In Student</div>
-                  <div className="text-base font-bold text-gray-900">{rollNumber}</div>
-                  <div className="text-xs text-gray-600 truncate">{user.email}</div>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <Link
-                    href="/feed"
-                    className="w-full bg-[#A41D35] hover:bg-[#8A152A] text-white text-[16px] font-bold py-3.5 px-6 rounded-xl transition text-center block shadow-sm tracking-wide"
-                  >
-                    Enter Placement Portal →
-                  </Link>
-                  <a
-                    href="/api/auth/signout"
-                    className="w-full text-center text-[13px] text-gray-500 hover:text-gray-800 font-medium block underline"
-                  >
-                    Sign in with a different Amrita account
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <LoginForm />
-            )}
+            <LoginForm />
           </div>
 
         </div>

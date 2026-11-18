@@ -23,6 +23,7 @@ export async function getExperiences(filters: {
   sort?: string | null
   page?: number
   limit?: number
+  isAdmin?: boolean
 }): Promise<{ posts: Experience[]; total: number; page: number; limit: number }> {
   if (isMockMode()) {
     const result = await getMockPosts(filters)
@@ -39,6 +40,11 @@ export async function getExperiences(filters: {
     let query = supabase
       .from('experiences' as any)
       .select('*, profiles!author_id(roll_number, email)', { count: 'exact' })
+
+    // Hide unpublished/hidden posts from regular students
+    if (!filters.isAdmin) {
+      query = query.neq('is_published', false)
+    }
 
     if (filters.company) query = query.eq('company_slug', filters.company)
     if (filters.year) query = query.eq('year', parseInt(filters.year))
@@ -60,6 +66,7 @@ export async function getExperiences(filters: {
     if (!error && data) {
       const formatted = (data as any[]).map((exp: any) => ({
         ...exp,
+        is_published: exp.is_published ?? true,
         author_roll_number: exp.profiles?.roll_number || 'Amrita Student',
         vote_count: exp.helpful_count ?? 0,
         dos_donts: [

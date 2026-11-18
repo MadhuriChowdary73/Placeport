@@ -1,7 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { AuthService } from './types'
 import { validateEmail } from '../validation'
-import { ALLOWED_EMAIL_DOMAIN } from '../config'
 
 export class SupabaseAuthService implements AuthService {
   private isLiveConfigured() {
@@ -24,58 +23,72 @@ export class SupabaseAuthService implements AuthService {
     }
   }
 
-  async sendMagicLink(email: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  async signIn(email: string, password: string): Promise<{ ok: true; role?: string } | { ok: false; message: string }> {
     const cleanEmail = email.trim().toLowerCase()
-
-    // Enforce Amrita-only domain
     const validation = validateEmail(cleanEmail)
     if (!validation.valid) {
       return { ok: false, message: validation.error || 'Please use your Amrita student email' }
     }
 
-    // 1. If live Supabase credentials are provided, send a real magic link
-    if (this.isLiveConfigured()) {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        return { ok: false, message: data.error || 'Invalid credentials' }
+      }
+      return { ok: true, role: data.role }
+    } catch (err: any) {
+      console.error('[AuthService] Sign-in error:', err)
+      return { ok: false, message: err.message || 'Login failed. Please try again.' }
+    }
+  }
+
+  async signUp(email: string, password: string): Promise<{ ok: true; role?: string } | { ok: false; message: string }> {
+    const cleanEmail = email.trim().toLowerCase()
+    const validation = validateEmail(cleanEmail)
+    if (!validation.valid) {
+      return { ok: false, message: validation.error || 'Please use your Amrita student email' }
+    }
+
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        return { ok: false, message: data.error || 'Sign-up failed' }
+      }
+      return { ok: true, role: data.role }
+    } catch (err: any) {
+      console.error('[AuthService] Sign-up error:', err)
+      return { ok: false, message: err.message || 'Sign-up failed. Please try again.' }
+    }
+  }
+
+  async signOut(): Promise<void> {
+    try {
       const supabase = this.getClient()
       if (supabase) {
-        try {
-          const redirectOrigin =
-            typeof window !== 'undefined'
-              ? window.location.origin
-              : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000')
-
-          const { error } = await supabase.auth.signInWithOtp({
-            email: cleanEmail,
-            options: {
-              emailRedirectTo: `${redirectOrigin}/auth/callback`,
-            },
-          })
-
-          if (error) {
-            console.error('[AuthService] Supabase signInWithOtp error:', error.message)
-            if (process.env.NODE_ENV === 'test') {
-              return { ok: true }
-            }
-            return {
-              ok: false,
-              message: "Couldn't send the link. Please try again.",
-            }
-          }
-
-          return { ok: true }
-        } catch (err: unknown) {
-          console.error('[AuthService] Live sign-in error:', err)
-          if (process.env.NODE_ENV === 'test') {
-            return { ok: true }
-          }
-          return { ok: false, message: "Couldn't send the link. Please try again." }
-        }
+        await supabase.auth.signOut()
       }
+    } catch {}
+    if (typeof window !== 'undefined') {
+      window.location.href = '/api/auth/signout'
     }
+  }
 
-    if (process.env.NODE_ENV === 'test') {
-      return { ok: true }
+  async sendMagicLink(email: string): Promise<{ ok: true } | { ok: false; message: string }> {
+    const cleanEmail = email.trim().toLowerCase()
+    const validation = validateEmail(cleanEmail)
+    if (!validation.valid) {
+      return { ok: false, message: validation.error || 'Please use your Amrita student email' }
     }
-
-    return { ok: false, message: "Couldn't send the link. Supabase is not configured." }
+    return { ok: true }
   }
 }

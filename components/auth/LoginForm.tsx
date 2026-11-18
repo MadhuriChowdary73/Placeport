@@ -3,10 +3,13 @@
 import { useState, type FormEvent } from 'react'
 import { auth } from '@/lib/auth'
 import { validateEmail, extractRollNumber } from '@/lib/validation'
+import { ADMIN_EMAIL } from '@/lib/config'
 
 export function LoginForm() {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -14,69 +17,73 @@ export function LoginForm() {
     e.preventDefault()
     setError(null)
 
-    const validation = validateEmail(email)
+    const cleanEmail = email.trim().toLowerCase()
+
+    if (!cleanEmail) {
+      setError('Please enter your email')
+      return
+    }
+
+    if (!password) {
+      setError('Please enter your password')
+      return
+    }
+
+    const validation = validateEmail(cleanEmail)
     if (!validation.valid) {
       setError(validation.error || 'Please enter a valid email')
       return
     }
 
-    // Verify we can extract a roll number from the email
-    const rollResult = extractRollNumber(email)
-    if (!rollResult.valid) {
-      setError(rollResult.error)
-      return
+    const isAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase()
+
+    // Sign Up validations
+    if (mode === 'signup') {
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters')
+        return
+      }
+
+      if (password !== confirmPassword) {
+        setError('Passwords do not match')
+        return
+      }
+
+      if (!isAdmin) {
+        const rollResult = extractRollNumber(cleanEmail)
+        if (!rollResult.valid) {
+          setError(rollResult.error)
+          return
+        }
+      }
     }
 
     setLoading(true)
     try {
-      const result = await auth.sendMagicLink(email)
-      if (result.ok) {
-        setSent(true)
+      if (mode === 'signin') {
+        const res = await auth.signIn(cleanEmail, password)
+        if (res.ok) {
+          // Direct redirect on successful login
+          window.location.href = '/feed'
+          return
+        } else {
+          setError(res.message)
+        }
       } else {
-        setError(result.message)
+        const res = await auth.signUp(cleanEmail, password)
+        if (res.ok) {
+          // Auto signed in upon creation
+          window.location.href = '/feed'
+          return
+        } else {
+          setError(res.message)
+        }
       }
-    } catch {
-      setError("Couldn't send the link. Please try again.")
+    } catch (err: any) {
+      setError(err.message || 'Authentication error. Please try again.')
     } finally {
       setLoading(false)
     }
-  }
-
-  if (sent) {
-    return (
-      <div className="bg-white rounded-3xl shadow-xl border border-[#E8E2D9] p-8 sm:p-10 max-w-md w-full text-center space-y-5">
-        <div className="h-16 w-16 mx-auto rounded-2xl bg-[#FDF2F4] border border-[#F5D0D7] flex items-center justify-center text-[32px]">
-          📬
-        </div>
-        <h2 className="text-[25px] font-bold text-gray-900 tracking-tight">Check your email</h2>
-        <p className="text-gray-600 text-[15px] leading-relaxed font-normal">
-          We sent a magic link to <strong className="text-gray-900 font-semibold">{email}</strong>. Click it to sign in.
-        </p>
-        <p className="text-[13px] text-gray-400 font-normal">The link expires in 1 hour.</p>
-
-        <div className="bg-[#FAF9F6] border border-[#E8E2D9] rounded-2xl p-4 text-[14px] text-gray-600 text-left space-y-1">
-          <p className="font-semibold text-gray-800 flex items-center gap-1.5">
-            <span>🔒</span> Verification Required
-          </p>
-          <p className="text-[13px] text-gray-600 leading-normal">
-            Click the secure link in your Amrita inbox to verify your student email and access PlacePort.
-          </p>
-        </div>
-
-        <div className="pt-1 flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setSent(false)
-              setError(null)
-            }}
-            className="w-full bg-[#FDF2F4] hover:bg-[#FBE5E9] text-[#A41D35] text-[14px] font-semibold py-2.5 px-4 rounded-xl border border-[#F5D0D7] transition"
-          >
-            Use a different email
-          </button>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -100,22 +107,91 @@ export function LoginForm() {
         </div>
       </div>
 
+      {/* Tabs: Sign In / Create Account */}
+      <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-2xl border border-gray-200 text-[14px] font-semibold">
+        <button
+          type="button"
+          onClick={() => {
+            setMode('signin')
+            setError(null)
+          }}
+          className={`py-2 rounded-xl transition ${
+            mode === 'signin'
+              ? 'bg-white text-gray-900 shadow-xs'
+              : 'text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          Sign In
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode('signup')
+            setError(null)
+          }}
+          className={`py-2 rounded-xl transition ${
+            mode === 'signup'
+              ? 'bg-white text-gray-900 shadow-xs'
+              : 'text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          Create Account
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Email field */}
         <div className="space-y-1.5">
           <label htmlFor="email" className="block text-[15px] font-semibold text-gray-700">
-            Email
+            {mode === 'signup' ? 'College Email' : 'Email Address'}
           </label>
           <input
             id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="av.sc.u4XXX@av.students.amrita.edu"
+            placeholder="name@av.students.amrita.edu"
             disabled={loading}
             autoComplete="email"
             className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[16px] font-normal focus:outline-none focus:ring-2 focus:ring-[#A41D35] focus:border-transparent transition bg-gray-50/50 placeholder:text-gray-400 placeholder:font-light"
           />
         </div>
+
+        {/* Password field */}
+        <div className="space-y-1.5">
+          <label htmlFor="password" className="block text-[15px] font-semibold text-gray-700">
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            disabled={loading}
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[16px] font-normal focus:outline-none focus:ring-2 focus:ring-[#A41D35] focus:border-transparent transition bg-gray-50/50 placeholder:text-gray-400 placeholder:font-light"
+          />
+        </div>
+
+        {/* Confirm password (signup only) */}
+        {mode === 'signup' && (
+          <div className="space-y-1.5">
+            <label htmlFor="confirmPassword" className="block text-[15px] font-semibold text-gray-700">
+              Confirm Password
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              disabled={loading}
+              autoComplete="new-password"
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[16px] font-normal focus:outline-none focus:ring-2 focus:ring-[#A41D35] focus:border-transparent transition bg-gray-50/50 placeholder:text-gray-400 placeholder:font-light"
+            />
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 text-red-700 text-[14px] font-medium rounded-xl px-4 py-2.5 border border-red-200">
@@ -134,13 +210,46 @@ export function LoginForm() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
-              <span>Sending link...</span>
+              <span>{mode === 'signup' ? 'Creating account…' : 'Signing in…'}</span>
             </>
           ) : (
-            'Send confirmation mail'
+            mode === 'signup' ? 'Create Account →' : 'Sign In to PlacePort →'
           )}
         </button>
       </form>
+
+      {/* Switch mode hint */}
+      <div className="text-center pt-2 text-[14px] text-gray-500 font-medium">
+        {mode === 'signin' ? (
+          <p>
+            First time here?{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signup')
+                setError(null)
+              }}
+              className="text-[#A41D35] hover:underline font-bold"
+            >
+              Create student account
+            </button>
+          </p>
+        ) : (
+          <p>
+            Already have an account?{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signin')
+                setError(null)
+              }}
+              className="text-[#A41D35] hover:underline font-bold"
+            >
+              Sign in
+            </button>
+          </p>
+        )}
+      </div>
     </div>
   )
 }

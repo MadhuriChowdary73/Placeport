@@ -15,14 +15,6 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // Check for local dev session cookie
-  const devSession = request.cookies.get('placeport_session')
-  const hasDevSession = Boolean(devSession?.value)
-
-  if (hasDevSession) {
-    return supabaseResponse
-  }
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 

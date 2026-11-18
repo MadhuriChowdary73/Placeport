@@ -20,8 +20,13 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get('page') ?? '1')
   const limit = 20
 
-  const res = await getExperiences({ company, year, role, campus, branch, outcome, sort, page, limit })
-  return NextResponse.json(res)
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const email = (user?.email || '').toLowerCase().trim()
+  const isAdmin = email === 'madhurichowdary2007@gmail.com'
+
+  const res = await getExperiences({ company, year, role, campus, branch, outcome, sort, page, limit, isAdmin })
+  return NextResponse.json({ ...res, isAdmin })
 }
 
 // POST /api/posts
