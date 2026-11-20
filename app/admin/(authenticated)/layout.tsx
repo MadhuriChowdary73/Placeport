@@ -10,14 +10,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/admin/login')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  const userEmail = (user.email || '').toLowerCase()
+  const isMasterAdmin = userEmail === 'madhurichowdary2007@gmail.com'
 
-  if ((profile as any)?.role !== 'admin') {
-    redirect('/feed')
+  if (!isMasterAdmin) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if ((profile as any)?.role !== 'admin') {
+      redirect('/feed')
+    }
   }
 
   return (

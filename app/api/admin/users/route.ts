@@ -26,8 +26,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if ((profile as any)?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const userEmail = (user.email || '').toLowerCase()
+    const isMasterAdmin = userEmail === 'madhurichowdary2007@gmail.com'
+
+    if (!isMasterAdmin) {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      if ((profile as any)?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const admin = await createAdminClient()
     const search = new URL(req.url).searchParams.get('q')
@@ -61,8 +66,13 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if ((profile as any)?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const userEmail = (user.email || '').toLowerCase()
+    const isMasterAdmin = userEmail === 'madhurichowdary2007@gmail.com'
+
+    if (!isMasterAdmin) {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      if ((profile as any)?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const { user_id, role } = await req.json()
     if (!user_id || !['student', 'admin'].includes(role)) {

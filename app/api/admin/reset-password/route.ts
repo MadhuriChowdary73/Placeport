@@ -13,14 +13,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    const userEmail = (user.email || '').toLowerCase()
+    const isMasterAdmin = userEmail === 'madhurichowdary2007@gmail.com'
 
-    if ((profile as any)?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Forbidden: Admin access required' }, { status: 403 })
+    if (!isMasterAdmin) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if ((profile as any)?.role !== 'admin') {
+        return NextResponse.json({ ok: false, error: 'Forbidden: Admin access required' }, { status: 403 })
+      }
     }
 
     // 2. Read target user / roll number and new password

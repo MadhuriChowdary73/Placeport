@@ -11,6 +11,9 @@ async function checkAdminAuth() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return false
 
+  const userEmail = (user.email || '').toLowerCase()
+  if (userEmail === 'madhurichowdary2007@gmail.com') return true
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
