@@ -150,7 +150,7 @@ export function LoginForm() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@av.students.amrita.edu"
+            placeholder="xxxx@av.students.amrita.edu"
             disabled={loading}
             autoComplete="email"
             className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[16px] font-normal focus:outline-none focus:ring-2 focus:ring-[#A41D35] focus:border-transparent transition bg-gray-50/50 placeholder:text-gray-400 placeholder:font-light"
