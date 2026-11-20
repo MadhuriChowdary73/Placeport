@@ -2,12 +2,11 @@
 
 import { useState, type FormEvent } from 'react'
 import { auth } from '@/lib/auth'
-import { validateEmail, extractRollNumber } from '@/lib/validation'
-import { ADMIN_EMAIL } from '@/lib/config'
+import { validateRollNumber } from '@/lib/validation'
 
 export function LoginForm() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [email, setEmail] = useState('')
+  const [rollNumber, setRollNumber] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,10 +16,10 @@ export function LoginForm() {
     e.preventDefault()
     setError(null)
 
-    const cleanEmail = email.trim().toLowerCase()
+    const cleanRoll = rollNumber.trim().toLowerCase()
 
-    if (!cleanEmail) {
-      setError('Please enter your email')
+    if (!cleanRoll) {
+      setError('Please enter your roll number')
       return
     }
 
@@ -29,13 +28,17 @@ export function LoginForm() {
       return
     }
 
-    const validation = validateEmail(cleanEmail)
-    if (!validation.valid) {
-      setError(validation.error || 'Please enter a valid email')
+    // Client-side validation check
+    const validation = validateRollNumber(cleanRoll)
+    if (!validation.valid || !validation.rollNumber) {
+      setError(
+        validation.error ||
+          'Please enter a valid Amrita roll number (e.g. av.sc.u4cse24001)'
+      )
       return
     }
 
-    const isAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase()
+    const normalizedRoll = validation.rollNumber
 
     // Sign Up validations
     if (mode === 'signup') {
@@ -48,35 +51,25 @@ export function LoginForm() {
         setError('Passwords do not match')
         return
       }
-
-      if (!isAdmin) {
-        const rollResult = extractRollNumber(cleanEmail)
-        if (!rollResult.valid) {
-          setError(rollResult.error)
-          return
-        }
-      }
     }
 
     setLoading(true)
     try {
       if (mode === 'signin') {
-        const res = await auth.signIn(cleanEmail, password)
+        const res = await auth.signIn(normalizedRoll, password)
         if (res.ok) {
-          // Direct redirect on successful login
           window.location.href = '/feed'
           return
         } else {
-          setError(res.message)
+          setError(res.message || 'Incorrect roll number or password.')
         }
       } else {
-        const res = await auth.signUp(cleanEmail, password)
+        const res = await auth.signUp(normalizedRoll, password, confirmPassword)
         if (res.ok) {
-          // Auto signed in upon creation
           window.location.href = '/feed'
           return
         } else {
-          setError(res.message)
+          setError(res.message || 'Sign-up failed')
         }
       }
     } catch (err: any) {
@@ -140,21 +133,24 @@ export function LoginForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email field */}
+        {/* Roll Number field */}
         <div className="space-y-1.5">
-          <label htmlFor="email" className="block text-[15px] font-semibold text-gray-700">
-            {mode === 'signup' ? 'College Email' : 'Email Address'}
+          <label htmlFor="rollNumber" className="block text-[15px] font-semibold text-gray-700">
+            Student Roll Number
           </label>
           <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="xxxx@av.students.amrita.edu"
+            id="rollNumber"
+            type="text"
+            value={rollNumber}
+            onChange={(e) => setRollNumber(e.target.value)}
+            placeholder="av.sc.u4cse24001"
             disabled={loading}
-            autoComplete="email"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[16px] font-normal focus:outline-none focus:ring-2 focus:ring-[#A41D35] focus:border-transparent transition bg-gray-50/50 placeholder:text-gray-400 placeholder:font-light"
+            autoComplete="username"
+            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[16px] font-normal focus:outline-none focus:ring-2 focus:ring-[#A41D35] focus:border-transparent transition bg-gray-50/50 placeholder:text-gray-400 placeholder:font-light font-mono"
           />
+          <p className="text-[12px] text-gray-500">
+            Format: <code className="font-semibold text-gray-700">av.sc.u4&lt;branch&gt;&lt;yy&gt;&lt;nnn&gt;</code>
+          </p>
         </div>
 
         {/* Password field */}
@@ -210,45 +206,56 @@ export function LoginForm() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
-              <span>{mode === 'signup' ? 'Creating account…' : 'Signing in…'}</span>
+              <span>{mode === 'signup' ? 'Verifying & Creating…' : 'Signing in…'}</span>
             </>
           ) : (
-            mode === 'signup' ? 'Create Account →' : 'Sign In to PlacePort →'
+            mode === 'signup' ? 'Create Student Account →' : 'Sign In to PlacePort →'
           )}
         </button>
       </form>
 
-      {/* Switch mode hint */}
-      <div className="text-center pt-2 text-[14px] text-gray-500 font-medium">
-        {mode === 'signin' ? (
-          <p>
-            First time here?{' '}
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signup')
-                setError(null)
-              }}
-              className="text-[#A41D35] hover:underline font-bold"
-            >
-              Create student account
-            </button>
-          </p>
-        ) : (
-          <p>
-            Already have an account?{' '}
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signin')
-                setError(null)
-              }}
-              className="text-[#A41D35] hover:underline font-bold"
-            >
-              Sign in
-            </button>
-          </p>
-        )}
+      {/* Switch mode hint & Admin link */}
+      <div className="space-y-3 pt-2 text-center text-[14px] text-gray-500 font-medium">
+        <div>
+          {mode === 'signin' ? (
+            <p>
+              First time here?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signup')
+                  setError(null)
+                }}
+                className="text-[#A41D35] hover:underline font-bold"
+              >
+                Create student account
+              </button>
+            </p>
+          ) : (
+            <p>
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signin')
+                  setError(null)
+                }}
+                className="text-[#A41D35] hover:underline font-bold"
+              >
+                Sign in
+              </button>
+            </p>
+          )}
+        </div>
+
+        <div className="border-t border-gray-100 pt-3">
+          <a
+            href="/admin/login"
+            className="text-[13px] text-gray-400 hover:text-[#A41D35] transition font-semibold"
+          >
+            Coordinator or Admin? Admin Portal Sign In →
+          </a>
+        </div>
       </div>
     </div>
   )

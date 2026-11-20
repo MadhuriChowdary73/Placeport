@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { postSchema } from '@/lib/validations/post'
 import { revalidatePath } from 'next/cache'
-import { isMockMode, getMockPosts, getMockProfile } from '@/lib/mockStore'
-import { parseRollNumber, extractRollNumber } from '@/lib/validation'
+import { ADMIN_EMAIL, isSyntheticEmail } from '@/lib/config'
 import { getExperiences, createExperience } from '@/lib/services/experienceService'
 
 // GET /api/posts
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
+  // Security: only logged-in users can read posts
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized. Please sign in to view experiences.' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const year = searchParams.get('year')
   const role = searchParams.get('role')
@@ -20,10 +26,8 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get('page') ?? '1')
   const limit = 20
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const email = (user?.email || '').toLowerCase().trim()
-  const isAdmin = email === 'madhurichowdary2007@gmail.com'
+  const email = (user.email || '').toLowerCase().trim()
+  const isAdmin = email === ADMIN_EMAIL.toLowerCase()
 
   const res = await getExperiences({ company, year, role, campus, branch, outcome, sort, page, limit, isAdmin })
   return NextResponse.json({ ...res, isAdmin })
@@ -38,12 +42,25 @@ export async function POST(req: NextRequest) {
   }
 
   const userEmail = (user.email || '').toLowerCase().trim()
-  const isAdminPoster = userEmail === 'madhurichowdary2007@gmail.com'
+  const isAdminPoster = userEmail === ADMIN_EMAIL.toLowerCase()
 
-  // Verify Amrita student email (admin is exempt)
-  if (!isAdminPoster && !userEmail.endsWith('@av.students.amrita.edu')) {
+  // Fetch author profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, roll_number, status')
+    .eq('id', user.id)
+    .single()
+
+  // Ensure user is approved and not blocked
+  if ((profile as any)?.status === 'blocked') {
+    return NextResponse.json({ error: 'Account suspended. You cannot publish experiences.' }, { status: 403 })
+  }
+
+  // Verify Amrita student account (synthetic email, college domain, or admin)
+  const isStudent = isSyntheticEmail(userEmail) || userEmail.endsWith('@av.students.amrita.edu')
+  if (!isAdminPoster && !isStudent) {
     return NextResponse.json(
-      { error: 'Only verified Amrita student accounts can publish experiences.' },
+      { error: 'Only approved Amrita student accounts can publish experiences.' },
       { status: 403 }
     )
   }
@@ -54,23 +71,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const parsedRoll = parseRollNumber(userEmail)
-  const fallbackRoll = extractRollNumber(userEmail)
-  const rollNumber = parsedRoll?.rollNumber || (fallbackRoll.valid ? fallbackRoll.rollNumber : userEmail.split('@')[0].toUpperCase())
-
-  // Ensure author profile row is present in public.profiles table
-  try {
-    await (supabase.from('profiles' as any) as any).upsert({
-      id: user.id,
-      email: userEmail,
-      roll_number: rollNumber,
-      branch: parsedRoll?.branch || parsed.data.branch || 'CSE',
-      batch_year: parsedRoll?.batchYear || 24,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
-  } catch (profErr) {
-    console.error('Error ensuring author profile exists:', profErr)
-  }
+  const rollNumber = (profile as any)?.roll_number || userEmail.split('@')[0]
 
   try {
     const post = await createExperience(

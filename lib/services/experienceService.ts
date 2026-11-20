@@ -7,6 +7,17 @@ import {
 } from '../mockStore'
 import { createClient } from '../supabase/server'
 import type { Experience } from '../types'
+import { maskRollNumber } from '../utils'
+
+function getDisplayRoll(exp: any): string {
+  if (exp.display_mode === 'anon') {
+    return exp.profiles?.handle ? `@${exp.profiles.handle}` : 'Anonymous Student'
+  }
+  const raw = exp.profiles?.roll_number || exp.author_roll_number
+  if (!raw || raw.toLowerCase() === 'admin') return 'Placement Team'
+  if (exp.display_mode === 'full') return raw.toUpperCase()
+  return maskRollNumber(raw.toUpperCase())
+}
 
 /**
  * Service layer for placement experiences.
@@ -67,7 +78,7 @@ export async function getExperiences(filters: {
       const formatted = (data as any[]).map((exp: any) => ({
         ...exp,
         is_published: exp.is_published ?? true,
-        author_roll_number: exp.profiles?.roll_number || 'Amrita Student',
+        author_roll_number: getDisplayRoll(exp),
         vote_count: exp.helpful_count ?? 0,
         dos_donts: [
           ...(exp.dos || []).map((text: string, i: number) => ({ id: `do-${i}`, post_id: exp.id, type: 'do', text })),
@@ -123,7 +134,7 @@ export async function getExperienceById(id: string): Promise<Experience | null> 
       const e = exp as any
       return {
         ...e,
-        author_roll_number: e.profiles?.roll_number || 'Amrita Student',
+        author_roll_number: getDisplayRoll(e),
         vote_count: e.helpful_count ?? 0,
         rounds: Array.isArray(e.rounds)
           ? e.rounds.map((r: any) => ({

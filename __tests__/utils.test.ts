@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { maskRollNumber, formatCtc, relativeTime } from '@/lib/utils'
-import { validateEmail, extractRollNumber, parseRollNumber } from '@/lib/validation'
+import {
+  validateEmail,
+  extractRollNumber,
+  parseRollNumber,
+  validateRollNumber,
+} from '@/lib/validation'
+import { rollNumberToEmail, emailToRollNumber, isSyntheticEmail } from '@/lib/config'
 import { auth } from '@/lib/auth'
 
 describe('maskRollNumber', () => {
@@ -12,6 +18,58 @@ describe('maskRollNumber', () => {
   it('replaces last 3 digits with XXX for AV.SC.U4... compact format', () => {
     expect(maskRollNumber('AV.SC.U4CSE21001')).toBe('AV.SC.U4CSE21XXX')
     expect(maskRollNumber('AV.SC.U4AIE22045')).toBe('AV.SC.U4AIE22XXX')
+  })
+})
+
+describe('validateRollNumber (Student Roll Number Validation)', () => {
+  it('validates and normalizes valid Amaravati student roll numbers', () => {
+    const res = validateRollNumber('av.sc.u4cse24001')
+    expect(res.valid).toBe(true)
+    expect(res.rollNumber).toBe('av.sc.u4cse24001')
+    expect(res.branch).toBe('CSE')
+    expect(res.batchYear).toBe(24)
+  })
+
+  it('normalizes uppercase and dotted input to standard lowercase format', () => {
+    const res = validateRollNumber('AV.SC.U4.AIE.24.045')
+    expect(res.valid).toBe(true)
+    expect(res.rollNumber).toBe('av.sc.u4aie24045')
+    expect(res.branch).toBe('AIE')
+  })
+
+  it('rejects roll numbers from non-Amaravati campuses', () => {
+    const res = validateRollNumber('cb.sc.u4cse24001')
+    expect(res.valid).toBe(false)
+    expect(res.error).toContain('Only Amrita Amaravati (av) is supported')
+  })
+
+  it('rejects roll numbers with invalid branches', () => {
+    const res = validateRollNumber('av.sc.u4xyz24001')
+    expect(res.valid).toBe(false)
+    expect(res.error).toContain('is not recognized')
+  })
+
+  it('rejects malformed roll number strings', () => {
+    expect(validateRollNumber('').valid).toBe(false)
+    expect(validateRollNumber('random_string').valid).toBe(false)
+    expect(validateRollNumber('12345').valid).toBe(false)
+  })
+})
+
+describe('Synthetic Email Helpers', () => {
+  it('converts roll numbers to synthetic placeport.invalid emails', () => {
+    expect(rollNumberToEmail('av.sc.u4cse24001')).toBe('av.sc.u4cse24001@placeport.invalid')
+    expect(rollNumberToEmail('  AV.SC.U4CSE24002  ')).toBe('av.sc.u4cse24002@placeport.invalid')
+  })
+
+  it('extracts roll number from synthetic email', () => {
+    expect(emailToRollNumber('av.sc.u4cse24001@placeport.invalid')).toBe('av.sc.u4cse24001')
+  })
+
+  it('identifies synthetic emails accurately', () => {
+    expect(isSyntheticEmail('av.sc.u4cse24001@placeport.invalid')).toBe(true)
+    expect(isSyntheticEmail('student@gmail.com')).toBe(false)
+    expect(isSyntheticEmail('av.sc.u4cse24001@av.students.amrita.edu')).toBe(false)
   })
 })
 
@@ -116,20 +174,9 @@ describe('extractRollNumber', () => {
 describe('AuthService interface', () => {
   it('exports a singleton auth instance conforming to AuthService', () => {
     expect(auth).toBeDefined()
-    expect(typeof auth.sendMagicLink).toBe('function')
-  })
-
-  it('rejects Gmail when sending magic link', async () => {
-    const res = await auth.sendMagicLink('test@gmail.com')
-    expect(res.ok).toBe(false)
-    if (!res.ok) {
-      expect(res.message).toBe('Please use your Amrita student email')
-    }
-  })
-
-  it('accepts valid Amrita email when sending magic link in dev mode', async () => {
-    const res = await auth.sendMagicLink('av.sc.u4cse21001@av.students.amrita.edu')
-    expect(res.ok).toBe(true)
+    expect(typeof auth.signIn).toBe('function')
+    expect(typeof auth.signUp).toBe('function')
+    expect(typeof auth.signOut).toBe('function')
   })
 })
 

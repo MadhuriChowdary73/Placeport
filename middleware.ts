@@ -7,11 +7,16 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isAuthRoute =
     pathname.startsWith('/auth') || pathname.startsWith('/api/auth')
+  const isAdminLogin = pathname === '/admin/login' || pathname === '/api/admin/login'
   const isPublicLanding =
-    pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/verify') || isAuthRoute
+    pathname === '/' ||
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/verify') ||
+    isAdminLogin ||
+    isAuthRoute
 
-  // Always let auth routes and public landing pass through
-  if (isAuthRoute) {
+  // Always let auth API and public landing pass through
+  if (isAuthRoute || isAdminLogin) {
     return supabaseResponse
   }
 
@@ -46,6 +51,12 @@ export async function middleware(request: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser()
 
+    // Unauthenticated user trying to access admin pages
+    if (!user && pathname.startsWith('/admin')) {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+
+    // Unauthenticated user trying to access protected student pages
     if (!user && !isPublicLanding) {
       return NextResponse.redirect(new URL('/', request.url))
     }
@@ -63,6 +74,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   } catch {
+    if (pathname.startsWith('/admin')) {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
     if (!isPublicLanding) {
       return NextResponse.redirect(new URL('/', request.url))
     }
