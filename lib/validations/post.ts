@@ -33,13 +33,15 @@ export const postSchema = z.object({
   year: z.number().int().min(2015).max(new Date().getFullYear() + 1),
   campus: z.string().min(1, 'Campus is required'),
   branch: z.string().min(1, 'Branch is required'),
+  author_roll_number: z.string().min(1, 'Roll number is required').max(60),
+  author_name: z.string().optional().nullable(),
   outcome: z.enum(['selected', 'rejected', 'waitlisted', 'no_offer']),
   ctc_min: z.number().positive().optional().nullable(),
   ctc_max: z.number().positive().optional().nullable(),
   overall_experience: z.string().optional().nullable(),
   preparation_tips: z.string().optional().nullable(),
   advice: z.string().max(500).optional().nullable(),
-  display_mode: z.enum(['full', 'masked', 'anon']).optional(),
+  display_mode: z.enum(['full', 'masked', 'name', 'anon', 'roll']).default('masked'),
   rounds: z.array(roundSchema).optional(),
   dos: z.array(dosDontsSchema).optional(),
   donts: z.array(dosDontsSchema).optional(),
@@ -50,6 +52,14 @@ export const postSchema = z.object({
 ).refine(
   (data) => !data.ctc_min || !data.ctc_max || data.ctc_max >= data.ctc_min,
   { message: 'Max CTC must be ≥ Min CTC', path: ['ctc_max'] }
+).refine(
+  (data) => {
+    if (data.display_mode === 'name') {
+      return Boolean(data.author_name && data.author_name.trim().length > 0)
+    }
+    return true
+  },
+  { message: 'Please enter your name', path: ['author_name'] }
 )
 
 export type PostInput = z.infer<typeof postSchema>

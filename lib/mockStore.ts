@@ -3,6 +3,7 @@
 
 import type { Profile } from './types'
 import { extractRollNumber } from './validation'
+import { maskRollNumber } from './utils'
 
 export function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -50,8 +51,9 @@ export interface MockPost {
   company_slug: string
   author_id: string
   author_roll_number: string
+  author_name?: string | null
   author_handle: string
-  display_mode: 'full' | 'masked' | 'anon'
+  display_mode: 'full' | 'masked' | 'name' | 'anon' | 'roll'
   year: number
   role: string
   campus: string
@@ -271,8 +273,19 @@ export async function createMockPost(data: any, authorId: string): Promise<MockP
 
   const newPostId = `post-${Date.now()}`
 
-  // Derive roll number from profile, never hardcode
-  const authorRollNumber = getRollNumberForUser(authorId, data.author_email)
+  // Derive roll number from payload or profile, never hardcode
+  const rawRoll = (data.author_roll_number || getRollNumberForUser(authorId, data.author_email) || 'AV.SC.U4CSE24001').toUpperCase()
+  const mode = data.display_mode || 'masked'
+  const authorName = data.author_name?.trim() || null
+
+  let displayAuthor = rawRoll
+  if (mode === 'name' && authorName) {
+    displayAuthor = authorName
+  } else if (mode === 'anon') {
+    displayAuthor = 'Anonymous Student'
+  } else if (mode === 'masked') {
+    displayAuthor = maskRollNumber(rawRoll)
+  }
 
   const newPost: MockPost = {
     id: newPostId,
@@ -280,9 +293,10 @@ export async function createMockPost(data: any, authorId: string): Promise<MockP
     company_name: company.name,
     company_slug: company.slug,
     author_id: authorId,
-    author_roll_number: authorRollNumber,
+    author_roll_number: displayAuthor,
+    author_name: authorName,
     author_handle: data.author_handle || 'amrita_scholar',
-    display_mode: data.display_mode || 'masked',
+    display_mode: mode,
     year: data.year || new Date().getFullYear(),
     role: data.role,
     campus: data.campus || 'Amaravati',

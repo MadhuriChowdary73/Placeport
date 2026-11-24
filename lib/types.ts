@@ -45,8 +45,9 @@ export interface Experience {
   company_slug: string
   author_id: string
   author_roll_number: string
+  author_name?: string | null
   author_handle: string
-  display_mode: 'full' | 'masked' | 'anon'
+  display_mode: 'full' | 'masked' | 'name' | 'anon' | 'roll'
   year: number
   role: string
   campus: string

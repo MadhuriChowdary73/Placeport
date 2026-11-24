@@ -164,7 +164,6 @@ CREATE POLICY "Amrita students can insert their own experiences"
   TO authenticated
   WITH CHECK (
     auth.uid() = author_id
-    AND (auth.jwt() ->> 'email') LIKE '%@av.students.amrita.edu'
   );
 
 CREATE POLICY "Users can update their own experiences"

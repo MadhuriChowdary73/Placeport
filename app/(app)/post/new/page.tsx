@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { postSchema, type PostInput } from '@/lib/validations/post'
 import { useCompanies, useRoundTypes } from '@/lib/hooks/usePosts'
 import { FlowBuilder, type RoundWithId } from '@/components/post/FlowBuilder'
+import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -16,9 +17,10 @@ import { Plus, Trash2 } from 'lucide-react'
 import { CAMPUSES, BRANCHES, OUTCOMES, OUTCOME_LABELS } from '@/lib/utils'
 
 const DISPLAY_MODES = [
-  { value: 'full',   label: 'Full roll number (e.g. AV.SC.U4CSE24001)' },
-  { value: 'masked', label: 'Masked roll number (e.g. AV.SC.U4CSE24XXX)' },
-  { value: 'anon',   label: 'Anonymous handle' },
+  { value: 'masked', label: 'Display Roll Number (Masked, e.g. AV.SC.U4CSE24XXX)', note: 'Recommended: Keeps your exact identity anonymous while showing campus and batch.' },
+  { value: 'full',   label: 'Display Roll Number (Full, e.g. AV.SC.U4CSE24001)', note: 'Shows your full roll number to verified Amrita viewers.' },
+  { value: 'name',   label: 'Display Name (Show your name)', note: 'Show your real name publicly as the author.' },
+  { value: 'anon',   label: 'Anonymous Student', note: 'Completely hides your roll number and name.' },
 ]
 
 export default function NewPostPage() {
@@ -33,11 +35,13 @@ export default function NewPostPage() {
   const { data: companies = [] } = useCompanies()
   const { data: roundTypes = [] } = useRoundTypes()
 
-  const { register, handleSubmit, control, setValue, formState: { errors } } = useForm<PostInput>({
+  const { register, handleSubmit, control, setValue, watch, getValues, formState: { errors } } = useForm<PostInput>({
     resolver: zodResolver(postSchema) as any,
     defaultValues: {
       campus: 'Amaravati',
       year: new Date().getFullYear(),
+      author_roll_number: '',
+      author_name: '',
       display_mode: 'masked',
       rounds: [],
       dos: [],
@@ -45,6 +49,39 @@ export default function NewPostPage() {
       resources: [],
     },
   })
+
+  const currentDisplayMode = watch('display_mode')
+
+  useEffect(() => {
+    async function prefillUser() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('roll_number, full_name, display_mode')
+            .eq('id', user.id)
+            .single()
+
+          const defaultRoll = (profile as any)?.roll_number || (user.email ? user.email.split('@')[0] : '')
+          const defaultName = (profile as any)?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || ''
+          if (defaultRoll && !getValues('author_roll_number')) {
+            setValue('author_roll_number', defaultRoll.toUpperCase())
+          }
+          if (defaultName && !getValues('author_name')) {
+            setValue('author_name', defaultName)
+          }
+          if ((profile as any)?.display_mode && !getValues('display_mode')) {
+            setValue('display_mode', (profile as any).display_mode)
+          }
+        }
+      } catch (err) {
+        console.warn('Could not prefill user profile:', err)
+      }
+    }
+    prefillUser()
+  }, [setValue, getValues])
 
   function handleRoundsChange(newRounds: RoundWithId[]) {
     setRounds(newRounds)
@@ -56,6 +93,9 @@ export default function NewPostPage() {
     try {
       const payload = {
         ...data,
+        author_roll_number: data.author_roll_number?.trim().toUpperCase(),
+        author_name: data.display_mode === 'name' ? (data.author_name?.trim() || null) : null,
+        display_mode: data.display_mode,
         rounds: rounds.map(({ _tempId, ...r }, idx) => ({
           ...r,
           order_index: idx + 1,
@@ -122,11 +162,35 @@ export default function NewPostPage() {
         })}
         className="space-y-8"
       >
-        {/* Section 1: Company meta */}
+        {/* Section 1: Candidate & Company Details */}
         <section className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900 border-b border-gray-100 pb-2">Company &amp; Role</h2>
+          <h2 className="text-xl font-bold text-gray-900 border-b border-gray-100 pb-2">Student &amp; Company Details</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Student Roll Number */}
+            <div className="space-y-1.5 sm:col-span-2 bg-[#FAF9F6] p-4 rounded-2xl border border-[#E8E2D9]">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold text-gray-900">
+                  Student Roll Number <span className="text-red-500">*</span>
+                </Label>
+                <span className="text-xs text-[#A41D35] font-semibold bg-[#FDF2F4] px-2 py-0.5 rounded border border-[#F5D0D7]">
+                  Required
+                </span>
+              </div>
+              <Input
+                {...register('author_roll_number')}
+                placeholder="e.g. AV.SC.U4CSE24106"
+                className={`text-base py-2.5 font-mono uppercase bg-white ${errors.author_roll_number ? 'border-red-400' : ''}`}
+              />
+              {errors.author_roll_number ? (
+                <p className="text-xs text-red-500 font-medium">{errors.author_roll_number.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500 font-normal">
+                  Format: <span className="font-mono font-medium">AV.SC.U4&lt;branch&gt;&lt;yy&gt;&lt;nnn&gt;</span> (e.g. AV.SC.U4CSE24106)
+                </p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-base font-semibold text-gray-700">Company Name *</Label>
               <Input
@@ -233,24 +297,65 @@ export default function NewPostPage() {
         </section>
 
         {/* Section 3: Display mode */}
-        <section className="space-y-3">
-          <h2 className="text-xl font-bold text-gray-900 border-b border-gray-100 pb-2">Display identity</h2>
+        <section className="space-y-4">
+          <div className="border-b border-gray-100 pb-2">
+            <h2 className="text-xl font-bold text-gray-900">Display identity</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Choose how you want your identity credited on the feed when others read your experience.
+            </p>
+          </div>
+
           <Controller name="display_mode" control={control} render={({ field }) => (
-            <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {DISPLAY_MODES.map(m => (
-                <label key={m.value} className="flex items-center gap-3 cursor-pointer">
+                <label
+                  key={m.value}
+                  className={`flex items-start gap-3 p-3.5 rounded-2xl border transition cursor-pointer ${
+                    field.value === m.value
+                      ? 'border-[#A41D35] bg-[#FDF2F4]/50 shadow-xs ring-1 ring-[#A41D35]/20'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
                   <input
                     type="radio"
                     value={m.value}
                     checked={field.value === m.value}
                     onChange={() => field.onChange(m.value)}
-                    className="accent-[#A41D35] h-4 w-4"
+                    className="accent-[#A41D35] h-4 w-4 mt-1"
                   />
-                  <span className="text-base font-medium text-gray-800">{m.label}</span>
+                  <div className="space-y-0.5">
+                    <span className="text-[15px] font-bold text-gray-900 block leading-tight">{m.label}</span>
+                    <span className="text-xs text-gray-500 block leading-relaxed">{m.note}</span>
+                  </div>
                 </label>
               ))}
             </div>
           )} />
+
+          {/* Conditional Name Input if "name" is selected */}
+          {currentDisplayMode === 'name' && (
+            <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2 animate-in fade-in-50 duration-200">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold text-gray-900">
+                  Your Full Name <span className="text-red-500">*</span>
+                </Label>
+                <span className="text-xs text-amber-800 font-semibold bg-amber-100 px-2 py-0.5 rounded">
+                  Will appear on post
+                </span>
+              </div>
+              <Input
+                {...register('author_name')}
+                placeholder="Enter your name (e.g. Madhuri Chowdary)"
+                className={`text-base py-2.5 bg-white ${errors.author_name ? 'border-red-400' : ''}`}
+              />
+              {errors.author_name && (
+                <p className="text-xs text-red-600 font-medium">{errors.author_name.message}</p>
+              )}
+              <p className="text-xs text-gray-600">
+                Your entered name will be displayed as the author of this placement experience instead of your roll number.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Section 4: Interview flow */}

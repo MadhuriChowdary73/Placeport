@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { postSchema } from '@/lib/validations/post'
 import { revalidatePath } from 'next/cache'
-import { ADMIN_EMAIL, isSyntheticEmail } from '@/lib/config'
+import { ADMIN_EMAIL } from '@/lib/config'
 import { getExperiences, createExperience } from '@/lib/services/experienceService'
 
 // GET /api/posts
@@ -47,22 +47,13 @@ export async function POST(req: NextRequest) {
   // Fetch author profile
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, roll_number, status')
+    .select('role, roll_number, status, full_name')
     .eq('id', user.id)
     .single()
 
-  // Ensure user is approved and not blocked
+  // Ensure user is not blocked
   if ((profile as any)?.status === 'blocked') {
     return NextResponse.json({ error: 'Account suspended. You cannot publish experiences.' }, { status: 403 })
-  }
-
-  // Verify Amrita student account (synthetic email, college domain, or admin)
-  const isStudent = isSyntheticEmail(userEmail) || userEmail.endsWith('@av.students.amrita.edu')
-  if (!isAdminPoster && !isStudent) {
-    return NextResponse.json(
-      { error: 'Only approved Amrita student accounts can publish experiences.' },
-      { status: 403 }
-    )
   }
 
   const body = await req.json()
@@ -71,7 +62,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   }
 
-  const rollNumber = (profile as any)?.roll_number || userEmail.split('@')[0]
+  const rollNumber = (parsed.data.author_roll_number || (profile as any)?.roll_number || userEmail.split('@')[0]).trim().toUpperCase()
+  const authorName = parsed.data.author_name?.trim() || (profile as any)?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
+  const displayMode = parsed.data.display_mode || 'masked'
+
+  // Update profile with the roll number and full name if provided
+  try {
+    await (supabase.from('profiles' as any) as any)
+      .update({
+        roll_number: rollNumber,
+        full_name: authorName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+  } catch (profErr) {
+    console.warn('[POST /api/posts] Profile update notice:', profErr)
+  }
 
   try {
     const post = await createExperience(
@@ -79,6 +85,8 @@ export async function POST(req: NextRequest) {
         ...parsed.data,
         author_email: userEmail,
         author_roll_number: rollNumber,
+        author_name: authorName,
+        display_mode: displayMode,
       },
       user.id
     )

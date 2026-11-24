@@ -10,12 +10,17 @@ import type { Experience } from '../types'
 import { maskRollNumber } from '../utils'
 
 function getDisplayRoll(exp: any): string {
-  if (exp.display_mode === 'anon') {
+  const mode = exp.display_mode || exp.profiles?.display_mode || 'masked'
+  if (mode === 'name') {
+    const name = exp.author_name || exp.profiles?.full_name
+    if (name && name.trim()) return name.trim()
+  }
+  if (mode === 'anon') {
     return exp.profiles?.handle ? `@${exp.profiles.handle}` : 'Anonymous Student'
   }
-  const raw = exp.profiles?.roll_number || exp.author_roll_number
+  const raw = exp.author_roll_number || exp.profiles?.roll_number
   if (!raw || raw.toLowerCase() === 'admin') return 'Placement Team'
-  if (exp.display_mode === 'full') return raw.toUpperCase()
+  if (mode === 'full' || mode === 'roll') return raw.toUpperCase()
   return maskRollNumber(raw.toUpperCase())
 }
 
@@ -50,7 +55,7 @@ export async function getExperiences(filters: {
     // First try querying the new 'experiences' table with author profile join
     let query = supabase
       .from('experiences' as any)
-      .select('*, profiles!author_id(roll_number, email)', { count: 'exact' })
+      .select('*, profiles!author_id(roll_number, full_name, email, display_mode)', { count: 'exact' })
 
     // Hide unpublished/hidden posts from regular students
     if (!filters.isAdmin) {
@@ -72,7 +77,36 @@ export async function getExperiences(filters: {
 
     query = query.range(offset, offset + limit - 1)
 
-    const { data, error, count } = await query
+    let { data, error, count } = await query
+
+    // Resilient fallback if profiles table doesn't have display_mode/full_name
+    if (error) {
+      let fallbackQuery = supabase
+        .from('experiences' as any)
+        .select('*, profiles!author_id(roll_number, email)', { count: 'exact' })
+
+      if (!filters.isAdmin) {
+        fallbackQuery = fallbackQuery.neq('is_published', false)
+      }
+      if (filters.company) fallbackQuery = fallbackQuery.eq('company_slug', filters.company)
+      if (filters.year) fallbackQuery = fallbackQuery.eq('year', parseInt(filters.year))
+      if (filters.role) fallbackQuery = fallbackQuery.ilike('role', `%${filters.role}%`)
+      if (filters.campus) fallbackQuery = fallbackQuery.eq('campus', filters.campus)
+      if (filters.branch) fallbackQuery = fallbackQuery.eq('branch', filters.branch)
+      if (filters.outcome) fallbackQuery = fallbackQuery.eq('outcome', filters.outcome)
+      if (filters.sort === 'helpful') {
+        fallbackQuery = fallbackQuery.order('helpful_count', { ascending: false })
+      } else {
+        fallbackQuery = fallbackQuery.order('created_at', { ascending: false })
+      }
+      fallbackQuery = fallbackQuery.range(offset, offset + limit - 1)
+      const resFallback = await fallbackQuery
+      if (!resFallback.error && resFallback.data) {
+        data = resFallback.data
+        count = resFallback.count
+        error = null
+      }
+    }
 
     if (!error && data) {
       const formatted = (data as any[]).map((exp: any) => ({
@@ -124,11 +158,21 @@ export async function getExperienceById(id: string): Promise<Experience | null> 
     const supabase = await createClient()
 
     // 1. Try fetching from 'experiences' table
-    const { data: exp, error: expError } = await supabase
+    let { data: exp, error: expError } = await supabase
       .from('experiences' as any)
-      .select('*, profiles!author_id(roll_number, email)')
+      .select('*, profiles!author_id(roll_number, full_name, email, display_mode)')
       .eq('id', id)
       .maybeSingle()
+
+    if (expError) {
+      const fallback = await supabase
+        .from('experiences' as any)
+        .select('*, profiles!author_id(roll_number, email)')
+        .eq('id', id)
+        .maybeSingle()
+      exp = fallback.data
+      expError = fallback.error
+    }
 
     if (!expError && exp) {
       const e = exp as any
@@ -202,38 +246,74 @@ export async function createExperience(
   // Format payload for public.experiences table
   const slug = data.company_name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'company'
 
-  const { data: inserted, error } = await (supabase.from('experiences' as any) as any)
-    .insert({
-      author_id: userId,
-      company_name: data.company_name,
-      company_slug: slug,
-      role: data.role,
-      year: Number(data.year),
-      campus: data.campus || 'Amaravati',
-      branch: data.branch,
-      outcome: data.outcome,
-      ctc_min: data.ctc_min ? Number(data.ctc_min) : null,
-      ctc_max: data.ctc_max ? Number(data.ctc_max) : null,
-      overall_experience: data.overall_experience || null,
-      preparation_tips: data.preparation_tips || null,
-      advice: data.advice || null,
-      dos: (data.dos || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
-      donts: (data.donts || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
-      resources: data.resources || [],
-      rounds: data.rounds || [],
-    })
-    .select('*')
-    .single()
+  const basePayload: any = {
+    author_id: userId,
+    company_name: data.company_name,
+    company_slug: slug,
+    role: data.role,
+    year: Number(data.year),
+    campus: data.campus || 'Amaravati',
+    branch: data.branch,
+    outcome: data.outcome,
+    ctc_min: data.ctc_min ? Number(data.ctc_min) : null,
+    ctc_max: data.ctc_max ? Number(data.ctc_max) : null,
+    overall_experience: data.overall_experience || null,
+    preparation_tips: data.preparation_tips || null,
+    advice: data.advice || null,
+    dos: (data.dos || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
+    donts: (data.donts || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
+    resources: data.resources || [],
+    rounds: data.rounds || [],
+  }
 
-  if (error || !inserted) {
-    console.error('[createExperience] Supabase insert error:', error)
-    throw error ?? new Error('Failed to create experience')
+  let inserted: any = null
+  let insertError: any = null
+
+  // Try insert with author_name, author_roll_number, and display_mode
+  try {
+    const res = await (supabase.from('experiences' as any) as any)
+      .insert({
+        ...basePayload,
+        author_name: data.author_name || null,
+        author_roll_number: data.author_roll_number || null,
+        display_mode: data.display_mode || 'masked',
+      })
+      .select('*')
+      .single()
+    inserted = res.data
+    insertError = res.error
+  } catch (e: any) {
+    insertError = e
+  }
+
+  // Graceful fallback to base payload if columns are not present on table
+  if (insertError || !inserted) {
+    const res = await (supabase.from('experiences' as any) as any)
+      .insert(basePayload)
+      .select('*')
+      .single()
+    inserted = res.data
+    insertError = res.error
+  }
+
+  if (insertError || !inserted) {
+    console.error('[createExperience] Supabase insert error:', insertError)
+    throw insertError ?? new Error('Failed to create experience')
   }
 
   const exp = inserted as any
+  const calculatedDisplayName = getDisplayRoll({
+    ...exp,
+    display_mode: data.display_mode,
+    author_name: data.author_name,
+    author_roll_number: data.author_roll_number,
+  })
+
   return {
     ...exp,
-    author_roll_number: data.author_roll_number || exp.profiles?.roll_number || 'Amrita Student',
+    display_mode: data.display_mode || 'masked',
+    author_name: data.author_name || null,
+    author_roll_number: calculatedDisplayName,
   } as Experience
 }
 
