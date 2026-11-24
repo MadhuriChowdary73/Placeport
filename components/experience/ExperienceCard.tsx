@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ThumbsUp, Bookmark, Building2, Calendar, MapPin, GitBranch, Eye, EyeOff, Trash2 } from 'lucide-react'
+import { ThumbsUp, Bookmark, Building2, Calendar, MapPin, GitBranch, Eye, EyeOff, Trash2, Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { useVote, useSave } from '@/lib/hooks/useVote'
@@ -24,7 +24,12 @@ export function ExperienceCard({ post, isAdmin = false }: ExperienceCardProps) {
   const [toggling, setToggling] = useState(false)
   const [deleted, setDeleted] = useState(false)
 
-  const displayName = post.author_roll_number || post.display_name || 'Amrita Student'
+  // Task 2: Display identity: Roll No if chosen, Name if chosen. Older values fall back to Name.
+  const displayMode = (post.display_mode || '').toLowerCase()
+  const displayName = displayMode === 'roll'
+    ? (post.author_roll_number || post.profiles?.roll_number || 'Amrita Student')
+    : (post.author_name || post.profiles?.full_name || post.display_name || post.author_roll_number || post.profiles?.roll_number || 'Amrita Student')
+
   const summaryText = post.overall_experience || post.advice || ''
 
   async function handleToggleStatus(e: React.MouseEvent) {
@@ -114,7 +119,7 @@ export function ExperienceCard({ post, isAdmin = false }: ExperienceCardProps) {
                 </>
               ) : (
                 <>
-                  <Eye className="w-3.5 h-3.5" /> Show on Feed
+                  <Eye className="w-3.5 h-3.5" /> Unhide from Feed
                 </>
               )}
             </button>
@@ -192,6 +197,39 @@ export function ExperienceCard({ post, isAdmin = false }: ExperienceCardProps) {
           <p className="text-[15px] text-gray-700 border-l-3 border-[#A41D35] pl-3.5 py-1 line-clamp-2 bg-[#FDF2F4]/50 rounded-r font-normal leading-relaxed">
             {summaryText}
           </p>
+        )}
+
+        {/* Final-Year Project (Task 4: title with stars below, read-only; if empty show nothing) */}
+        {(post.project_title || post.projectTitle) && (
+          <div className="bg-[#FAF9F6] border border-[#E8E2D9] rounded-xl p-3 space-y-1.5">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+              Final-Year Project
+            </div>
+            <div className="text-[14px] font-semibold text-gray-900 leading-snug">
+              {post.project_title || post.projectTitle}
+            </div>
+            {Boolean(post.project_rating || post.projectRating) && (
+              <div className="flex items-center gap-1 pt-0.5">
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const rating = Number(post.project_rating || post.projectRating || 0)
+                  return (
+                    <Star
+                      key={star}
+                      className={cn(
+                        'w-4 h-4',
+                        star <= rating
+                          ? 'text-amber-400 fill-amber-400'
+                          : 'text-gray-200'
+                      )}
+                    />
+                  )
+                })}
+                <span className="text-xs font-semibold text-amber-800 ml-1">
+                  {post.project_rating || post.projectRating} / 5
+                </span>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Footer: Author (roll number), date, helpful count, Save */}

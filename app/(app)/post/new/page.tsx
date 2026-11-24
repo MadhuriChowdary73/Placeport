@@ -13,14 +13,12 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Star } from 'lucide-react'
 import { CAMPUSES, BRANCHES, OUTCOMES, OUTCOME_LABELS } from '@/lib/utils'
 
 const DISPLAY_MODES = [
-  { value: 'masked', label: 'Display Roll Number (Masked, e.g. AV.SC.U4CSE24XXX)', note: 'Recommended: Keeps your exact identity anonymous while showing campus and batch.' },
-  { value: 'full',   label: 'Display Roll Number (Full, e.g. AV.SC.U4CSE24001)', note: 'Shows your full roll number to verified Amrita viewers.' },
-  { value: 'name',   label: 'Display Name (Show your name)', note: 'Show your real name publicly as the author.' },
-  { value: 'anon',   label: 'Anonymous Student', note: 'Completely hides your roll number and name.' },
+  { value: 'roll', label: 'Roll No', note: 'Display your student roll number on the feed.' },
+  { value: 'name', label: 'Name', note: 'Display your full name on the feed.' },
 ]
 
 export default function NewPostPage() {
@@ -31,6 +29,7 @@ export default function NewPostPage() {
   const [dos, setDos] = useState<string[]>([''])
   const [donts, setDonts] = useState<string[]>([''])
   const [resources, setResources] = useState<Array<{ url: string; note: string }>>([])
+  const [hoverRating, setHoverRating] = useState<number | null>(null)
 
   const { data: companies = [] } = useCompanies()
   const { data: roundTypes = [] } = useRoundTypes()
@@ -42,7 +41,9 @@ export default function NewPostPage() {
       year: new Date().getFullYear(),
       author_roll_number: '',
       author_name: '',
-      display_mode: 'masked',
+      display_mode: 'roll',
+      project_title: '',
+      project_rating: null,
       rounds: [],
       dos: [],
       donts: [],
@@ -95,7 +96,11 @@ export default function NewPostPage() {
         ...data,
         author_roll_number: data.author_roll_number?.trim().toUpperCase(),
         author_name: data.display_mode === 'name' ? (data.author_name?.trim() || null) : null,
-        display_mode: data.display_mode,
+        display_mode: data.display_mode === 'name' ? 'name' : 'roll',
+        project_title: data.project_title?.trim() || null,
+        project_rating: data.project_rating ? Number(data.project_rating) : null,
+        projectTitle: data.project_title?.trim() || null,
+        projectRating: data.project_rating ? Number(data.project_rating) : null,
         rounds: rounds.map(({ _tempId, ...r }, idx) => ({
           ...r,
           order_index: idx + 1,
@@ -356,6 +361,66 @@ export default function NewPostPage() {
               </p>
             </div>
           )}
+        </section>
+
+        {/* Section: Final-Year Project */}
+        <section className="space-y-4">
+          <h2 className="text-xl font-bold text-gray-900 border-b border-gray-100 pb-2">Final-Year Project</h2>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-base font-semibold text-gray-700">Project Title</Label>
+              <Input
+                {...register('project_title')}
+                placeholder="Enter the project you worked on for your final year…"
+                className="text-base py-2.5"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-base font-semibold text-gray-700">Project Rating</Label>
+              <Controller
+                name="project_rating"
+                control={control}
+                render={({ field }) => {
+                  const currentRating = field.value || 0
+                  return (
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const isFilled = (hoverRating ?? currentRating) >= star
+                          return (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => field.onChange(field.value === star ? null : star)}
+                              onMouseEnter={() => setHoverRating(star)}
+                              onMouseLeave={() => setHoverRating(null)}
+                              className="p-1 transition-transform hover:scale-110 focus:outline-hidden"
+                              title={`${star} star${star > 1 ? 's' : ''}`}
+                            >
+                              <Star
+                                className={`w-7 h-7 transition-colors ${
+                                  isFilled
+                                    ? 'text-amber-400 fill-amber-400'
+                                    : 'text-gray-300'
+                                }`}
+                              />
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <span className="text-sm font-medium text-gray-500 ml-1">
+                        {currentRating > 0 ? `${currentRating} of 5 stars` : '(Optional) Click to rate'}
+                      </span>
+                    </div>
+                  )
+                }}
+              />
+              {errors.project_rating && (
+                <p className="text-xs text-red-500 font-medium">{errors.project_rating.message}</p>
+              )}
+            </div>
+          </div>
         </section>
 
         {/* Section 4: Interview flow */}

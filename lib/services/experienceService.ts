@@ -10,18 +10,32 @@ import type { Experience } from '../types'
 import { maskRollNumber } from '../utils'
 
 function getDisplayRoll(exp: any): string {
-  const mode = exp.display_mode || exp.profiles?.display_mode || 'masked'
-  if (mode === 'name') {
-    const name = exp.author_name || exp.profiles?.full_name
-    if (name && name.trim()) return name.trim()
+  const mode = (exp.display_mode || '').toLowerCase()
+  if (mode === 'roll') {
+    return (exp.author_roll_number || exp.profiles?.roll_number || 'Amrita Student').toUpperCase()
   }
-  if (mode === 'anon') {
-    return exp.profiles?.handle ? `@${exp.profiles.handle}` : 'Anonymous Student'
+  // Any other mode (name, masked, anon, etc.) falls back to Name
+  const name = exp.author_name || exp.profiles?.full_name
+  if (name && name.trim()) return name.trim()
+  return (exp.author_roll_number || exp.profiles?.roll_number || 'Amrita Student')
+}
+
+function extractMeta(exp: any) {
+  let meta: any = null
+  if (Array.isArray(exp?.resources)) {
+    const metaRes = exp.resources.find((r: any) => r && r.url === 'placeport://meta')
+    if (metaRes?.note) {
+      try { meta = JSON.parse(metaRes.note) } catch {}
+    }
   }
-  const raw = exp.author_roll_number || exp.profiles?.roll_number
-  if (!raw || raw.toLowerCase() === 'admin') return 'Placement Team'
-  if (mode === 'full' || mode === 'roll') return raw.toUpperCase()
-  return maskRollNumber(raw.toUpperCase())
+  const display_mode = exp?.display_mode || meta?.display_mode || exp?.profiles?.display_mode || 'name'
+  const author_name = exp?.author_name || meta?.author_name || exp?.profiles?.full_name || null
+  const author_roll_number = exp?.author_roll_number || meta?.author_roll_number || exp?.profiles?.roll_number || null
+  const project_title = exp?.project_title || meta?.project_title || null
+  const project_rating = exp?.project_rating ?? meta?.project_rating ?? null
+  const is_published = exp?.is_published ?? meta?.is_published ?? true
+
+  return { display_mode, author_name, author_roll_number, project_title, project_rating, is_published }
 }
 
 /**
@@ -59,14 +73,14 @@ export async function getExperiences(filters: {
 
     // Hide unpublished/hidden posts from regular students
     if (!filters.isAdmin) {
-      query = query.neq('is_published', false)
+      query = query.or('is_published.is.null,is_published.eq.true')
     }
 
     if (filters.company) query = query.eq('company_slug', filters.company)
     if (filters.year) query = query.eq('year', parseInt(filters.year))
     if (filters.role) query = query.ilike('role', `%${filters.role}%`)
     if (filters.campus) query = query.eq('campus', filters.campus)
-    if (filters.branch) query = query.eq('branch', filters.branch)
+    if (filters.branch && filters.branch !== 'all') query = query.ilike('branch', filters.branch)
     if (filters.outcome) query = query.eq('outcome', filters.outcome)
 
     if (filters.sort === 'helpful') {
@@ -86,13 +100,13 @@ export async function getExperiences(filters: {
         .select('*, profiles!author_id(roll_number, email)', { count: 'exact' })
 
       if (!filters.isAdmin) {
-        fallbackQuery = fallbackQuery.neq('is_published', false)
+        fallbackQuery = fallbackQuery.or('is_published.is.null,is_published.eq.true')
       }
       if (filters.company) fallbackQuery = fallbackQuery.eq('company_slug', filters.company)
       if (filters.year) fallbackQuery = fallbackQuery.eq('year', parseInt(filters.year))
       if (filters.role) fallbackQuery = fallbackQuery.ilike('role', `%${filters.role}%`)
       if (filters.campus) fallbackQuery = fallbackQuery.eq('campus', filters.campus)
-      if (filters.branch) fallbackQuery = fallbackQuery.eq('branch', filters.branch)
+      if (filters.branch && filters.branch !== 'all') fallbackQuery = fallbackQuery.ilike('branch', filters.branch)
       if (filters.outcome) fallbackQuery = fallbackQuery.eq('outcome', filters.outcome)
       if (filters.sort === 'helpful') {
         fallbackQuery = fallbackQuery.order('helpful_count', { ascending: false })
@@ -109,16 +123,23 @@ export async function getExperiences(filters: {
     }
 
     if (!error && data) {
-      const formatted = (data as any[]).map((exp: any) => ({
-        ...exp,
-        is_published: exp.is_published ?? true,
-        author_roll_number: getDisplayRoll(exp),
-        vote_count: exp.helpful_count ?? 0,
-        dos_donts: [
-          ...(exp.dos || []).map((text: string, i: number) => ({ id: `do-${i}`, post_id: exp.id, type: 'do', text })),
-          ...(exp.donts || []).map((text: string, i: number) => ({ id: `dont-${i}`, post_id: exp.id, type: 'dont', text })),
-        ],
-      }))
+      const formatted = (data as any[]).map((exp: any) => {
+        const meta = extractMeta(exp)
+        const cleanResources = Array.isArray(exp.resources)
+          ? exp.resources.filter((r: any) => r && r.url !== 'placeport://meta')
+          : []
+        return {
+          ...exp,
+          ...meta,
+          author_roll_number: getDisplayRoll({ ...exp, ...meta }),
+          vote_count: exp.helpful_count ?? 0,
+          resources: cleanResources,
+          dos_donts: [
+            ...(exp.dos || []).map((text: string, i: number) => ({ id: `do-${i}`, post_id: exp.id, type: 'do', text })),
+            ...(exp.donts || []).map((text: string, i: number) => ({ id: `dont-${i}`, post_id: exp.id, type: 'dont', text })),
+          ],
+        }
+      })
       return { posts: formatted as Experience[], total: count ?? formatted.length, page, limit }
     }
 
@@ -176,9 +197,14 @@ export async function getExperienceById(id: string): Promise<Experience | null> 
 
     if (!expError && exp) {
       const e = exp as any
+      const meta = extractMeta(e)
+      const cleanResources = Array.isArray(e.resources)
+        ? e.resources.filter((r: any) => r && r.url !== 'placeport://meta')
+        : []
       return {
         ...e,
-        author_roll_number: getDisplayRoll(e),
+        ...meta,
+        author_roll_number: getDisplayRoll({ ...e, ...meta }),
         vote_count: e.helpful_count ?? 0,
         rounds: Array.isArray(e.rounds)
           ? e.rounds.map((r: any) => ({
@@ -190,7 +216,7 @@ export async function getExperienceById(id: string): Promise<Experience | null> 
           ...(e.dos || []).map((text: string, i: number) => ({ id: `do-${i}`, post_id: e.id, type: 'do' as const, text })),
           ...(e.donts || []).map((text: string, i: number) => ({ id: `dont-${i}`, post_id: e.id, type: 'dont' as const, text })),
         ],
-        resources: Array.isArray(e.resources) ? e.resources : [],
+        resources: cleanResources,
       } as Experience
     }
 
@@ -246,6 +272,27 @@ export async function createExperience(
   // Format payload for public.experiences table
   const slug = data.company_name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'company'
 
+  const displayMode = data.display_mode === 'name' ? 'name' : 'roll'
+  const authorName = data.author_name || null
+  const authorRollNumber = data.author_roll_number || null
+  const projectTitle = data.project_title || data.projectTitle || null
+  const projectRating = data.project_rating ? Number(data.project_rating) : (data.projectRating ? Number(data.projectRating) : null)
+
+  const metaItem = {
+    url: 'placeport://meta',
+    note: JSON.stringify({
+      display_mode: displayMode,
+      author_name: authorName,
+      author_roll_number: authorRollNumber,
+      project_title: projectTitle,
+      project_rating: projectRating,
+      is_published: true,
+    }),
+  }
+
+  const existingResources = (data.resources || []).filter((r: any) => r && r.url !== 'placeport://meta')
+  const resourcesWithMeta = [...existingResources, metaItem]
+
   const basePayload: any = {
     author_id: userId,
     company_name: data.company_name,
@@ -262,21 +309,24 @@ export async function createExperience(
     advice: data.advice || null,
     dos: (data.dos || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
     donts: (data.donts || []).map((d: any) => typeof d === 'string' ? d : d.content || d.text || '').filter(Boolean),
-    resources: data.resources || [],
+    resources: resourcesWithMeta,
     rounds: data.rounds || [],
   }
 
   let inserted: any = null
   let insertError: any = null
 
-  // Try insert with author_name, author_roll_number, and display_mode
+  // Try insert with first-class columns: author_name, author_roll_number, display_mode, project_title, project_rating
   try {
     const res = await (supabase.from('experiences' as any) as any)
       .insert({
         ...basePayload,
-        author_name: data.author_name || null,
-        author_roll_number: data.author_roll_number || null,
-        display_mode: data.display_mode || 'masked',
+        author_name: authorName,
+        author_roll_number: authorRollNumber,
+        display_mode: displayMode,
+        project_title: projectTitle,
+        project_rating: projectRating,
+        is_published: true,
       })
       .select('*')
       .single()
@@ -286,7 +336,7 @@ export async function createExperience(
     insertError = e
   }
 
-  // Graceful fallback to base payload if columns are not present on table
+  // Graceful fallback to base payload (which has metadata embedded in resources)
   if (insertError || !inserted) {
     const res = await (supabase.from('experiences' as any) as any)
       .insert(basePayload)
@@ -304,17 +354,73 @@ export async function createExperience(
   const exp = inserted as any
   const calculatedDisplayName = getDisplayRoll({
     ...exp,
-    display_mode: data.display_mode,
-    author_name: data.author_name,
-    author_roll_number: data.author_roll_number,
+    display_mode: displayMode,
+    author_name: authorName,
+    author_roll_number: authorRollNumber,
   })
 
   return {
     ...exp,
-    display_mode: data.display_mode || 'masked',
-    author_name: data.author_name || null,
+    display_mode: displayMode,
+    author_name: authorName,
     author_roll_number: calculatedDisplayName,
+    project_title: projectTitle,
+    project_rating: projectRating,
+    resources: existingResources,
   } as Experience
+}
+
+export async function toggleExperiencePublishStatus(id: string): Promise<{ ok: boolean; is_published: boolean }> {
+  if (isMockMode()) {
+    const { toggleMockPostPublishStatus } = await import('../mockStore')
+    return toggleMockPostPublishStatus(id)
+  }
+
+  const supabase = await createClient()
+
+  // 1. Fetch current post
+  const { data: currentPost, error: fetchErr } = await supabase
+    .from('experiences' as any)
+    .select('id, is_published, resources')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (fetchErr || !currentPost) {
+    const { toggleMockPostPublishStatus } = await import('../mockStore')
+    return toggleMockPostPublishStatus(id)
+  }
+
+  const cp = currentPost as any
+  const meta = extractMeta(cp)
+  const current = meta.is_published
+  const nextState = !current
+
+  // Update metadata in resources as resilient fallback
+  const updatedResources = Array.isArray(cp.resources) ? [...cp.resources] : []
+  const metaIndex = updatedResources.findIndex((r: any) => r && r.url === 'placeport://meta')
+  let existingMeta: any = {}
+  if (metaIndex >= 0 && updatedResources[metaIndex]?.note) {
+    try { existingMeta = JSON.parse(updatedResources[metaIndex].note) } catch {}
+  }
+  const newMeta = { ...existingMeta, is_published: nextState }
+  if (metaIndex >= 0) {
+    updatedResources[metaIndex] = { url: 'placeport://meta', note: JSON.stringify(newMeta) }
+  } else {
+    updatedResources.push({ url: 'placeport://meta', note: JSON.stringify(newMeta) })
+  }
+
+  // Attempt update in experiences table
+  let { error: updateErr } = await (supabase.from('experiences' as any) as any)
+    .update({ is_published: nextState, resources: updatedResources, updated_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (updateErr) {
+    await (supabase.from('experiences' as any) as any)
+      .update({ resources: updatedResources })
+      .eq('id', id)
+  }
+
+  return { ok: true, is_published: nextState }
 }
 
 export async function deleteExperience(id: string): Promise<boolean> {

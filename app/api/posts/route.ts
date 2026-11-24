@@ -27,7 +27,13 @@ export async function GET(req: NextRequest) {
   const limit = 20
 
   const email = (user.email || '').toLowerCase().trim()
-  const isAdmin = email === ADMIN_EMAIL.toLowerCase()
+  let isAdmin = email === ADMIN_EMAIL.toLowerCase()
+  if (!isAdmin) {
+    const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+    if ((userProfile as any)?.role === 'admin') {
+      isAdmin = true
+    }
+  }
 
   const res = await getExperiences({ company, year, role, campus, branch, outcome, sort, page, limit, isAdmin })
   return NextResponse.json({ ...res, isAdmin })
@@ -64,7 +70,9 @@ export async function POST(req: NextRequest) {
 
   const rollNumber = (parsed.data.author_roll_number || (profile as any)?.roll_number || userEmail.split('@')[0]).trim().toUpperCase()
   const authorName = parsed.data.author_name?.trim() || (profile as any)?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
-  const displayMode = parsed.data.display_mode || 'masked'
+  const displayMode = parsed.data.display_mode === 'name' ? 'name' : 'roll'
+  const projectTitle = parsed.data.project_title ?? (body.projectTitle ? String(body.projectTitle).trim() : null)
+  const projectRating = parsed.data.project_rating ?? (body.projectRating ? Number(body.projectRating) : null)
 
   // Update profile with the roll number and full name if provided
   try {
@@ -87,6 +95,8 @@ export async function POST(req: NextRequest) {
         author_roll_number: rollNumber,
         author_name: authorName,
         display_mode: displayMode,
+        project_title: projectTitle,
+        project_rating: projectRating,
       },
       user.id
     )

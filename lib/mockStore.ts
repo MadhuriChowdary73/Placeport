@@ -53,7 +53,10 @@ export interface MockPost {
   author_roll_number: string
   author_name?: string | null
   author_handle: string
-  display_mode: 'full' | 'masked' | 'name' | 'anon' | 'roll'
+  display_mode: 'roll' | 'name' | string
+  project_title?: string | null
+  project_rating?: number | null
+  is_published?: boolean
   year: number
   role: string
   campus: string
@@ -204,8 +207,14 @@ export async function getMockPosts(filters: {
   sort?: string | null
   page?: number
   limit?: number
+  isAdmin?: boolean
 }) {
   let filtered = [...posts]
+
+  // Hide unpublished posts from non-admin viewers
+  if (!filters.isAdmin) {
+    filtered = filtered.filter(p => p.is_published !== false)
+  }
 
   if (filters.company) {
     filtered = filtered.filter(p => p.company_slug === filters.company)
@@ -221,7 +230,7 @@ export async function getMockPosts(filters: {
   if (filters.campus) {
     filtered = filtered.filter(p => p.campus.toLowerCase() === filters.campus?.toLowerCase())
   }
-  if (filters.branch) {
+  if (filters.branch && filters.branch !== 'all') {
     filtered = filtered.filter(p => p.branch.toLowerCase() === filters.branch?.toLowerCase())
   }
   if (filters.outcome) {
@@ -275,16 +284,13 @@ export async function createMockPost(data: any, authorId: string): Promise<MockP
 
   // Derive roll number from payload or profile, never hardcode
   const rawRoll = (data.author_roll_number || getRollNumberForUser(authorId, data.author_email) || 'AV.SC.U4CSE24001').toUpperCase()
-  const mode = data.display_mode || 'masked'
+  const mode = data.display_mode === 'roll' ? 'roll' : 'name'
   const authorName = data.author_name?.trim() || null
 
+  // Task 2: Roll No shows roll number, Name shows name (older values fall back to name)
   let displayAuthor = rawRoll
-  if (mode === 'name' && authorName) {
-    displayAuthor = authorName
-  } else if (mode === 'anon') {
-    displayAuthor = 'Anonymous Student'
-  } else if (mode === 'masked') {
-    displayAuthor = maskRollNumber(rawRoll)
+  if (mode === 'name') {
+    displayAuthor = authorName || rawRoll
   }
 
   const newPost: MockPost = {
@@ -297,6 +303,9 @@ export async function createMockPost(data: any, authorId: string): Promise<MockP
     author_name: authorName,
     author_handle: data.author_handle || 'amrita_scholar',
     display_mode: mode,
+    project_title: data.project_title || data.projectTitle || null,
+    project_rating: data.project_rating ? Number(data.project_rating) : (data.projectRating ? Number(data.projectRating) : null),
+    is_published: true,
     year: data.year || new Date().getFullYear(),
     role: data.role,
     campus: data.campus || 'Amaravati',
@@ -504,4 +513,12 @@ export async function getMockCompanySummary(slug: string) {
     resources: allResources.slice(0, 5),
     posts: companyPosts,
   }
+}
+
+export function toggleMockPostPublishStatus(id: string): { ok: boolean; is_published: boolean } {
+  const post = posts.find(p => p.id === id)
+  if (!post) return { ok: false, is_published: false }
+  const current = post.is_published !== false
+  post.is_published = !current
+  return { ok: true, is_published: post.is_published }
 }

@@ -25,7 +25,7 @@ export function relativeTime(date: string | Date): string {
 }
 
 export const CAMPUSES = ['Amaravati', 'Amritapuri', 'Bengaluru', 'Coimbatore', 'Chennai', 'Mysuru', 'Kochi']
-export const BRANCHES = ['CSE', 'AIE', 'AI&DS', 'AI&ML', 'CyberSecurity', 'ECE', 'EEE', 'ME', 'CE', 'IT', 'BioTech', 'Chemical']
+export const BRANCHES = ['CSE', 'AIE', 'CCE', 'AI&DS', 'AI&ML', 'CyberSecurity', 'ECE', 'EEE', 'ME', 'CE', 'IT', 'BioTech', 'Chemical']
 export const OUTCOMES = ['selected', 'rejected', 'waitlisted', 'no_offer'] as const
 export const OUTCOME_LABELS: Record<string, string> = {
   selected:   'Selected 🎉',

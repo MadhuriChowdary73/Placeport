@@ -47,7 +47,9 @@ export interface Experience {
   author_roll_number: string
   author_name?: string | null
   author_handle: string
-  display_mode: 'full' | 'masked' | 'name' | 'anon' | 'roll'
+  display_mode: 'roll' | 'name' | string
+  project_title?: string | null
+  project_rating?: number | null
   year: number
   role: string
   campus: string
