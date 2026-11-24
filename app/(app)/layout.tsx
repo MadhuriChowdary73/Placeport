@@ -16,9 +16,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const userEmail = (user.email || '').toLowerCase()
   const isAdmin = (profile as any)?.role === 'admin' || userEmail === ADMIN_EMAIL.toLowerCase()
+  const name = user.user_metadata?.full_name || user.user_metadata?.name || ''
   const rollNumber = (profile as any)?.roll_number || userEmail.split('@')[0]
   const displayLabel = isAdmin
     ? `Administrator (${ADMIN_EMAIL})`
+    : name
+    ? `${name} (${rollNumber.toUpperCase()})`
     : `Student (${rollNumber.toUpperCase()})`
 
   return (

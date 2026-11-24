@@ -2,12 +2,6 @@ import { createBrowserClient } from '@supabase/ssr'
 import type { AuthService } from './types'
 
 export class SupabaseAuthService implements AuthService {
-  private isLiveConfigured() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    return Boolean(url && key && !url.includes('placeholder'))
-  }
-
   private getClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -22,50 +16,38 @@ export class SupabaseAuthService implements AuthService {
     }
   }
 
-  async signIn(identifier: string, password: string): Promise<{ ok: true; role?: string } | { ok: false; message: string }> {
-    const clean = identifier.trim().toLowerCase()
-    if (!clean || !password) {
-      return { ok: false, message: 'Incorrect roll number or password.' }
-    }
+  async signInWithGoogle(): Promise<{ error?: string }> {
+    const supabase = this.getClient()
+    if (!supabase) return { error: 'Supabase configuration is missing' }
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rollNumber: clean, password }),
+      const redirectTo = `${window.location.origin}/api/auth/callback`
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
       })
-      const data = await res.json()
-      if (!res.ok || !data.ok) {
-        return { ok: false, message: data.error || 'Incorrect roll number or password.' }
+
+      if (error) {
+        return { error: error.message }
       }
-      return { ok: true, role: data.role }
+      return {}
     } catch (err: any) {
-      console.error('[AuthService] Sign-in error:', err)
-      return { ok: false, message: 'Incorrect roll number or password.' }
+      return { error: err.message || 'Google sign-in initiation failed' }
     }
   }
 
-  async signUp(identifier: string, password: string, confirmPassword?: string): Promise<{ ok: true; role?: string } | { ok: false; message: string }> {
-    const clean = identifier.trim().toLowerCase()
-    if (!clean) {
-      return { ok: false, message: 'Roll number is required' }
-    }
+  async signIn(identifier: string, password?: string): Promise<{ ok: boolean; message?: string }> {
+    return { ok: true }
+  }
 
-    try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rollNumber: clean, password, confirmPassword }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.ok) {
-        return { ok: false, message: data.error || 'Sign-up failed' }
-      }
-      return { ok: true, role: data.role }
-    } catch (err: any) {
-      console.error('[AuthService] Sign-up error:', err)
-      return { ok: false, message: err.message || 'Sign-up failed. Please try again.' }
-    }
+  async signUp(identifier: string, password?: string, confirmPassword?: string): Promise<{ ok: boolean; message?: string }> {
+    return { ok: true }
   }
 
   async signOut(): Promise<void> {
@@ -81,7 +63,6 @@ export class SupabaseAuthService implements AuthService {
   }
 
   async sendMagicLink(email: string): Promise<{ ok: true } | { ok: false; message: string }> {
-    // Magic link is disabled for student roll number auth
     return { ok: true }
   }
 }

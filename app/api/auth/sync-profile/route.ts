@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { ADMIN_EMAIL } from '@/lib/config'
 import { parseRollNumber, extractRollNumber } from '@/lib/validation'
 
 export async function POST(req: NextRequest) {
@@ -15,24 +16,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user credentials' }, { status: 400 })
     }
 
-    if (!email.endsWith('@av.students.amrita.edu')) {
-      return NextResponse.json({ error: 'Domain not allowed' }, { status: 403 })
-    }
-
+    const isAdmin = email === ADMIN_EMAIL.toLowerCase()
     const parsed = parseRollNumber(email)
     const fallbackRoll = extractRollNumber(email)
-    const rollNumber = parsed?.rollNumber || (fallbackRoll.valid ? fallbackRoll.rollNumber : email.split('@')[0].toUpperCase())
+    const rollNumber = isAdmin
+      ? 'ADMIN'
+      : parsed?.rollNumber || (fallbackRoll.valid ? fallbackRoll.rollNumber : email.split('@')[0].toUpperCase())
 
-    await (supabase.from('profiles' as any) as any).upsert({
-      id: userId,
-      email: email,
-      roll_number: rollNumber,
-      branch: parsed?.branch || 'CSE',
-      batch_year: parsed?.batchYear || 24,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
+    await (supabase.from('profiles' as any) as any).upsert(
+      {
+        id: userId,
+        email: email,
+        full_name: user?.user_metadata?.full_name || user?.user_metadata?.name || null,
+        roll_number: rollNumber,
+        branch: isAdmin ? 'ADMIN' : parsed?.branch || 'CSE',
+        batch_year: isAdmin ? 24 : parsed?.batchYear || 24,
+        role: isAdmin ? 'admin' : 'student',
+        status: 'approved',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    )
 
-    return NextResponse.json({ ok: true, rollNumber })
+    return NextResponse.json({ ok: true, rollNumber, role: isAdmin ? 'admin' : 'student' })
   } catch (err: any) {
     console.error('[SyncProfile] Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

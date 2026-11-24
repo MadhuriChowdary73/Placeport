@@ -174,8 +174,7 @@ describe('extractRollNumber', () => {
 describe('AuthService interface', () => {
   it('exports a singleton auth instance conforming to AuthService', () => {
     expect(auth).toBeDefined()
-    expect(typeof auth.signIn).toBe('function')
-    expect(typeof auth.signUp).toBe('function')
+    expect(typeof auth.signInWithGoogle).toBe('function')
     expect(typeof auth.signOut).toBe('function')
   })
 })
