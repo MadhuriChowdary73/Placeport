@@ -10,11 +10,6 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Security: only logged-in users can read posts
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized. Please sign in to view experiences.' }, { status: 401 })
-  }
-
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
   const year = searchParams.get('year')
@@ -26,12 +21,15 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get('page') ?? '1')
   const limit = 20
 
-  const email = (user.email || '').toLowerCase().trim()
-  let isAdmin = email === ADMIN_EMAIL.toLowerCase()
-  if (!isAdmin) {
-    const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-    if ((userProfile as any)?.role === 'admin') {
-      isAdmin = true
+  let isAdmin = false
+  if (user) {
+    const email = (user.email || '').toLowerCase().trim()
+    isAdmin = email === ADMIN_EMAIL.toLowerCase()
+    if (!isAdmin) {
+      const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      if ((userProfile as any)?.role === 'admin') {
+        isAdmin = true
+      }
     }
   }
 

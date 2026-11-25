@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { ThumbsUp, Bookmark, Building2, Calendar, MapPin, GitBranch, Eye, EyeOff, Trash2, Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -17,6 +18,7 @@ interface ExperienceCardProps {
 
 export function ExperienceCard({ post, isAdmin = false }: ExperienceCardProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { voted, toggleVote, isPending: votePending } = useVote(post.id)
   const { saved, toggleSave, isPending: savePending } = useSave(post.id)
 
@@ -43,6 +45,7 @@ export function ExperienceCard({ post, isAdmin = false }: ExperienceCardProps) {
       const data = await res.json()
       if (res.ok && data.ok) {
         setIsPublished(data.is_published)
+        queryClient.invalidateQueries({ queryKey: ['posts'] })
       }
     } catch (err) {
       console.error('Failed to toggle post visibility:', err)
@@ -62,6 +65,7 @@ export function ExperienceCard({ post, isAdmin = false }: ExperienceCardProps) {
       })
       if (res.ok) {
         setDeleted(true)
+        queryClient.invalidateQueries({ queryKey: ['posts'] })
       }
     } catch (err) {
       console.error('Failed to delete post:', err)

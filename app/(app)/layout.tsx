@@ -5,20 +5,26 @@ import { ADMIN_EMAIL } from '@/lib/config'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/')
 
-  // Fetch profile to get role and roll_number
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, roll_number')
-    .eq('id', user.id)
-    .single()
+  const userEmail = (user?.email || '').toLowerCase()
+  let isAdmin = false
+  let profile: any = null
 
-  const userEmail = (user.email || '').toLowerCase()
-  const isAdmin = (profile as any)?.role === 'admin' || userEmail === ADMIN_EMAIL.toLowerCase()
-  const name = user.user_metadata?.full_name || user.user_metadata?.name || ''
-  const rollNumber = (profile as any)?.roll_number || userEmail.split('@')[0]
-  const displayLabel = isAdmin
+  if (user) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('role, roll_number')
+      .eq('id', user.id)
+      .maybeSingle()
+    profile = data
+    isAdmin = (profile as any)?.role === 'admin' || userEmail === ADMIN_EMAIL.toLowerCase()
+  }
+
+  const name = user?.user_metadata?.full_name || user?.user_metadata?.name || ''
+  const rollNumber = (profile as any)?.roll_number || (userEmail ? userEmail.split('@')[0] : '')
+  const displayLabel = !user
+    ? 'Visitor'
+    : isAdmin
     ? `Administrator (${ADMIN_EMAIL})`
     : name
     ? `${name} (${rollNumber.toUpperCase()})`
@@ -27,7 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-gray-900 flex flex-col justify-between">
       <div>
-        <Nav isAdmin={isAdmin} displayLabel={displayLabel} />
+        <Nav isAdmin={isAdmin} isLoggedIn={Boolean(user)} displayLabel={displayLabel} />
         <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
           {children}
         </main>
@@ -52,7 +58,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   )
 }
 
-function Nav({ isAdmin, displayLabel }: { isAdmin: boolean; displayLabel: string }) {
+function Nav({ isAdmin, isLoggedIn = true, displayLabel }: { isAdmin: boolean; isLoggedIn?: boolean; displayLabel: string }) {
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-[#E8E2D9] shadow-xs">
       {/* Top accent stripe — MyAmrita identity bar */}
@@ -95,7 +101,11 @@ function Nav({ isAdmin, displayLabel }: { isAdmin: boolean; displayLabel: string
               Admin Console →
             </a>
           )}
-          <a href="/api/auth/signout" className="text-[14px] font-medium text-gray-400 hover:text-[#A41D35] transition py-1">Sign out</a>
+          {isLoggedIn ? (
+            <a href="/api/auth/signout" className="text-[14px] font-medium text-gray-400 hover:text-[#A41D35] transition py-1">Sign out</a>
+          ) : (
+            <a href="/login" className="text-[14px] font-bold text-[#A41D35] hover:underline transition py-1">Sign in</a>
+          )}
           <a
             href="/post/new"
             className="bg-[#A41D35] text-white px-4 py-2 rounded-xl hover:bg-[#8A152A] transition text-[14px] font-bold shadow-xs flex items-center gap-1.5 tracking-wide"

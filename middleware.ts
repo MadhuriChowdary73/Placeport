@@ -12,6 +12,8 @@ export async function middleware(request: NextRequest) {
     pathname === '/' ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/verify') ||
+    pathname === '/feed' ||
+    pathname.startsWith('/api/posts') ||
     isAdminLogin ||
     isAuthRoute
 

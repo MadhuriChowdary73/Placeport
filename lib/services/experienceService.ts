@@ -8,6 +8,7 @@ import {
 import { createClient } from '../supabase/server'
 import type { Experience } from '../types'
 import { maskRollNumber } from '../utils'
+import { isPostHidden, toggleHiddenPost, unhidePost } from '../hiddenStore'
 
 function getDisplayRoll(exp: any): string {
   const mode = (exp.display_mode || '').toLowerCase()
@@ -71,11 +72,6 @@ export async function getExperiences(filters: {
       .from('experiences' as any)
       .select('*, profiles!author_id(roll_number, full_name, email, display_mode)', { count: 'exact' })
 
-    // Hide unpublished/hidden posts from regular students
-    if (!filters.isAdmin) {
-      query = query.or('is_published.is.null,is_published.eq.true')
-    }
-
     if (filters.company) query = query.eq('company_slug', filters.company)
     if (filters.year) query = query.eq('year', parseInt(filters.year))
     if (filters.role) query = query.ilike('role', `%${filters.role}%`)
@@ -99,9 +95,6 @@ export async function getExperiences(filters: {
         .from('experiences' as any)
         .select('*, profiles!author_id(roll_number, email)', { count: 'exact' })
 
-      if (!filters.isAdmin) {
-        fallbackQuery = fallbackQuery.or('is_published.is.null,is_published.eq.true')
-      }
       if (filters.company) fallbackQuery = fallbackQuery.eq('company_slug', filters.company)
       if (filters.year) fallbackQuery = fallbackQuery.eq('year', parseInt(filters.year))
       if (filters.role) fallbackQuery = fallbackQuery.ilike('role', `%${filters.role}%`)
@@ -125,12 +118,15 @@ export async function getExperiences(filters: {
     if (!error && data) {
       const formatted = (data as any[]).map((exp: any) => {
         const meta = extractMeta(exp)
+        const isHidden = isPostHidden(exp.id) || meta.is_published === false || exp.is_published === false
+        const isPublished = !isHidden
         const cleanResources = Array.isArray(exp.resources)
           ? exp.resources.filter((r: any) => r && r.url !== 'placeport://meta')
           : []
         return {
           ...exp,
           ...meta,
+          is_published: isPublished,
           author_roll_number: getDisplayRoll({ ...exp, ...meta }),
           vote_count: exp.helpful_count ?? 0,
           resources: cleanResources,
@@ -140,7 +136,13 @@ export async function getExperiences(filters: {
           ],
         }
       })
-      return { posts: formatted as Experience[], total: count ?? formatted.length, page, limit }
+
+      // Normal users never receive hidden experiences; admins see all experiences
+      const filteredPosts = !filters.isAdmin
+        ? formatted.filter((exp: any) => exp.is_published !== false)
+        : formatted
+
+      return { posts: filteredPosts as Experience[], total: filteredPosts.length, page, limit }
     }
 
     // Fallback to legacy posts_public view if experiences table not yet run
@@ -371,59 +373,54 @@ export async function createExperience(
 }
 
 export async function toggleExperiencePublishStatus(id: string): Promise<{ ok: boolean; is_published: boolean }> {
+  // Toggle persistent hidden state
+  const nextPublishedState = toggleHiddenPost(id)
+
   if (isMockMode()) {
     const { toggleMockPostPublishStatus } = await import('../mockStore')
-    return toggleMockPostPublishStatus(id)
+    toggleMockPostPublishStatus(id)
+    return { ok: true, is_published: nextPublishedState }
   }
 
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  // 1. Fetch current post
-  const { data: currentPost, error: fetchErr } = await supabase
-    .from('experiences' as any)
-    .select('id, is_published, resources')
-    .eq('id', id)
-    .maybeSingle()
-
-  if (fetchErr || !currentPost) {
-    const { toggleMockPostPublishStatus } = await import('../mockStore')
-    return toggleMockPostPublishStatus(id)
-  }
-
-  const cp = currentPost as any
-  const meta = extractMeta(cp)
-  const current = meta.is_published
-  const nextState = !current
-
-  // Update metadata in resources as resilient fallback
-  const updatedResources = Array.isArray(cp.resources) ? [...cp.resources] : []
-  const metaIndex = updatedResources.findIndex((r: any) => r && r.url === 'placeport://meta')
-  let existingMeta: any = {}
-  if (metaIndex >= 0 && updatedResources[metaIndex]?.note) {
-    try { existingMeta = JSON.parse(updatedResources[metaIndex].note) } catch {}
-  }
-  const newMeta = { ...existingMeta, is_published: nextState }
-  if (metaIndex >= 0) {
-    updatedResources[metaIndex] = { url: 'placeport://meta', note: JSON.stringify(newMeta) }
-  } else {
-    updatedResources.push({ url: 'placeport://meta', note: JSON.stringify(newMeta) })
-  }
-
-  // Attempt update in experiences table
-  let { error: updateErr } = await (supabase.from('experiences' as any) as any)
-    .update({ is_published: nextState, resources: updatedResources, updated_at: new Date().toISOString() })
-    .eq('id', id)
-
-  if (updateErr) {
-    await (supabase.from('experiences' as any) as any)
-      .update({ resources: updatedResources })
+    // 1. Fetch current post (select id, resources without requiring is_published column)
+    const { data: currentPost } = await supabase
+      .from('experiences' as any)
+      .select('id, resources')
       .eq('id', id)
+      .maybeSingle()
+
+    if (currentPost) {
+      const cp = currentPost as any
+      const updatedResources = Array.isArray(cp.resources) ? [...cp.resources] : []
+      const metaIndex = updatedResources.findIndex((r: any) => r && r.url === 'placeport://meta')
+      let existingMeta: any = {}
+      if (metaIndex >= 0 && updatedResources[metaIndex]?.note) {
+        try { existingMeta = JSON.parse(updatedResources[metaIndex].note) } catch {}
+      }
+      const newMeta = { ...existingMeta, is_published: nextPublishedState }
+      if (metaIndex >= 0) {
+        updatedResources[metaIndex] = { url: 'placeport://meta', note: JSON.stringify(newMeta) }
+      } else {
+        updatedResources.push({ url: 'placeport://meta', note: JSON.stringify(newMeta) })
+      }
+
+      // Best effort update in experiences table
+      await (supabase.from('experiences' as any) as any)
+        .update({ resources: updatedResources, updated_at: new Date().toISOString() })
+        .eq('id', id)
+    }
+  } catch (err) {
+    console.warn('[toggleExperiencePublishStatus] Database sync note:', err)
   }
 
-  return { ok: true, is_published: nextState }
+  return { ok: true, is_published: nextPublishedState }
 }
 
 export async function deleteExperience(id: string): Promise<boolean> {
+  unhidePost(id)
   if (isMockMode()) {
     return deleteMockPost(id)
   }
