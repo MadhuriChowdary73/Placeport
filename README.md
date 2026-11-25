@@ -56,7 +56,7 @@ It is not a senior-to-junior mentoring model. Every experience is first-class.
 - Do's, don'ts, helpful resource links, overall experience and preparation tips.
 
 **Discovery**
-- Feed of experience cards with search and filters (company, branch, year, outcome) and sorting.
+- Feed of experience cards with a branch filter and sorting in the UI. The posts API also supports `company`, `year`, `role` and `outcome` filters, and filters live in the URL so links are shareable.
 - Full detail page per experience (`/experiences/[id]`) showing every round in order.
 - Company pages with an aggregated summary (`/company/[slug]`).
 - Resources catalogue, saved posts, and contributor profile pages.
@@ -64,10 +64,10 @@ It is not a senior-to-junior mentoring model. Every experience is first-class.
 **Community**
 - Helpful votes and bookmarks.
 - Contributor badges and in-app notifications.
-- Authors are shown by **masked roll number** rather than name, so people who prefer privacy can still contribute.
+- Contributors choose how they appear: by **roll number** (masked, e.g. `AV.SC.U4CSE24XXX`) or by name, so people who prefer privacy can still contribute.
 
 **Moderation (admin)**
-- Admin console to manage the approved roll-number roster, review user reports, hide or delete posts, manage users and reset passwords.
+- Admin console to manage roll numbers and users, review user reports, hide or delete posts, manage users and reset passwords.
 
 ## Architecture
 
@@ -90,33 +90,37 @@ flowchart LR
 
 ## Authentication
 
-Students sign in with **roll number + password**. There are no email flows for students.
+Students sign in with **Google (OAuth 2.0)**, handled by Supabase Auth. There are no passwords or magic links in the student flow.
 
 ```mermaid
 sequenceDiagram
     participant S as Student
-    participant API as /api/auth/signup
-    participant DB as Supabase
-    S->>API: roll number + password
-    API->>API: Rate limit (5 attempts / 10 min / IP)
-    API->>API: Validate roll number format
-    API->>DB: Check valid_roll_numbers eligibility
-    DB-->>API: eligible
-    API->>DB: Create auth user (internal synthetic email)
-    DB-->>S: Session
+    participant App as Next.js App
+    participant G as Google OAuth 2.0
+    participant SB as Supabase Auth
+    S->>App: Click "Continue with Google"
+    App->>SB: signInWithOAuth(provider: google)
+    SB->>G: Redirect to Google consent screen
+    G-->>SB: Authorization code
+    SB-->>App: Redirect to /api/auth/callback?code=...
+    App->>SB: exchangeCodeForSession(code)
+    App->>SB: Upsert profile (roll number, branch, batch)
+    App-->>S: Redirect to /feed
 ```
 
-- Each roll number maps to an **internal synthetic email** (`<roll>@placeport.invalid`) that is never shown in the UI, which lets Supabase Auth handle passwords while students never deal with email.
-- Roll numbers follow the Amrita format, e.g. `AV.SC.U4CSE24106`, and are parsed into branch and batch year.
-- The **admin** signs in separately at `/admin/login` with a real email.
+- The **callback route** (`app/api/auth/callback/route.ts`) exchanges the code for a session and upserts the student's profile.
+- For Amrita student emails (e.g. `av.sc.u4cse24106@av.students.amrita.edu`), the **roll number, branch and batch year are parsed from the email**.
+- The **admin** is identified by `ADMIN_EMAIL` and gets the `admin` role.
+- A separate email/password sign-in exists only for the admin console at `/admin/login`.
 
 ## Security and Privacy
 
-- **Row Level Security** is enabled on all tables, so authorization is enforced in the database, not just the UI.
+- **Row Level Security** is enabled on the core tables created by the setup scripts, so authorization is enforced in the database, not just the UI.
 - Users can edit or delete only their own content.
-- Sensitive operations (admin roster, users, moderation) run in server route handlers using the service-role key, which is **never exposed to the browser**.
-- Auth endpoints are **rate limited**.
-- Public roll numbers are masked in the UI.
+- Sensitive operations (admin users, roll numbers, moderation) run in server route handlers using the service-role key, which is **never exposed to the browser**.
+- Admin login and the legacy credential endpoints are **rate limited**. The Google sign-in flow is not rate limited by the app.
+- Blocked users cannot publish, and the admin can suspend accounts.
+- Student identity comes from Google, so no student passwords are stored by the app.
 
 > **Note:** the rate limiter is in-memory, so on serverless platforms the limit applies per instance. Use a shared store (e.g. Redis) if you need strict global limits.
 
@@ -158,12 +162,20 @@ SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>   # server only, required for 
 
 > Never commit `.env.local`, never prefix the service-role key with `NEXT_PUBLIC_`, and never expose it to the client.
 
+## Google OAuth Setup
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create an **OAuth 2.0 Client ID** (type: Web application).
+2. Add Supabase's callback URL as an authorized redirect URI: `https://<your-project>.supabase.co/auth/v1/callback`.
+3. In Supabase, go to **Authentication → Providers → Google**, enable it, and paste the Client ID and Client Secret.
+4. In **Authentication → URL Configuration**, set the Site URL and add `http://localhost:3000/api/auth/callback` and `https://placeport-lime.vercel.app/api/auth/callback` to the redirect URLs.
+
 ## Database Setup
 
 1. Create a project in the [Supabase dashboard](https://supabase.com/dashboard).
 2. Open **SQL Editor** and run `supabase/complete_setup.sql`. It creates the core tables, the helpful-vote trigger, and the RLS policies. Apply the `migration_*.sql` files if your database predates them.
-3. Create the `valid_roll_numbers` table (`roll_number`, optional `branch`, `batch`, `created_at`) and add approved roll numbers, or manage them from the admin console at `/admin/roll-numbers`.
-4. Create the admin user in Supabase Auth with a real email, and set it as `ADMIN_EMAIL` in `lib/config.ts`.
+
+   > **Known gap:** the SQL scripts cover only the core tables (`profiles`, `experiences`, `rounds`, `saves`, `helpful_votes`). Parts of the app also query `posts`, `companies`, `resources`, `dos_donts`, `votes`, `notifications`, `reports`, `badges`, `user_badges`, `round_types` and `valid_roll_numbers`, which are not created by any script in the repo. Add them to the setup SQL before a fresh deployment will fully work.
+3. Set `ADMIN_EMAIL` in `lib/config.ts` to the Google account that should have admin access.
 
 ## Scripts
 
