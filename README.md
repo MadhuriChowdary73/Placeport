@@ -15,6 +15,10 @@ Round-by-round interview experiences from students who actually sat the process,
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth%20%2B%20RLS-3ECF8E?logo=supabase&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-Vitest%20%2B%20Playwright-6E9F18)
 
+<br>
+<img width="1896" height="902" alt="image" src="https://github.com/user-attachments/assets/26f1278e-76b9-4453-89b5-d51752bfc4fe" />
+
+
 </div>
 
 ---
@@ -108,10 +112,6 @@ sequenceDiagram
     App-->>S: Redirect to /feed
 ```
 
-- The **callback route** (`app/api/auth/callback/route.ts`) exchanges the code for a session and upserts the student's profile.
-- For Amrita student emails (e.g. `av.sc.u4cse24106@av.students.amrita.edu`), the **roll number, branch and batch year are parsed from the email**.
-- The **admin** is identified by `ADMIN_EMAIL` and gets the `admin` role.
-- A separate email/password sign-in exists only for the admin console at `/admin/login`.
 
 ## Security and Privacy
 
@@ -158,7 +158,7 @@ Create `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-publishable-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>   # server only, required for admin routes
-ADMIN_EMAIL=admin@example.com                       # server only, designated admin email
+ADMIN_EMAIL=<admin-email>                           # server only
 ```
 
 > Never commit `.env.local`, never prefix the service-role key with `NEXT_PUBLIC_`, and never expose it to the client.
@@ -173,10 +173,9 @@ ADMIN_EMAIL=admin@example.com                       # server only, designated ad
 ## Database Setup
 
 1. Create a project in the [Supabase dashboard](https://supabase.com/dashboard).
-2. Open **SQL Editor** and run `supabase/complete_setup.sql`. It creates the core tables, the helpful-vote trigger, and the RLS policies. Apply the `migration_*.sql` files if your database predates them.
+2. Open **SQL Editor** and run `supabase/complete_setup.sql`. It creates all tables, views, triggers (vote/save counts, badge awarding, role/status protection), seed data and RLS policies, and is safe to re-run. Apply the `migration_*.sql` files if your database predates them.
 
-   > **Known gap:** the SQL scripts cover only the core tables (`profiles`, `experiences`, `rounds`, `saves`, `helpful_votes`). Parts of the app also query `posts`, `companies`, `resources`, `dos_donts`, `votes`, `notifications`, `reports`, `badges`, `user_badges`, `round_types` and `valid_roll_numbers`, which are not created by any script in the repo. Add them to the setup SQL before a fresh deployment will fully work.
-3. Set `ADMIN_EMAIL` in `lib/config.ts` to the Google account that should have admin access.
+3. Set the `ADMIN_EMAIL` environment variable to the account that should be admin, create that user in Supabase Auth with a strong password, and make sure its `profiles.role` is `admin`.
 
 ## Scripts
 
