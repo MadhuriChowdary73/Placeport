@@ -1,150 +1,232 @@
-# PlacePort 🎓
+<div align="center">
 
-> **A login-only placement experience platform exclusively for Amrita Vishwa Vidyapeetham, Amaravati campus students.**
+# PlacePort
 
-PlacePort lets Amaravati students who have attended placement interviews (selected or not) share organized round-by-round experiences, verified resources, and honest do's and don'ts, so their juniors and peers can prepare better.
+### Campus placement intelligence, crowdsourced and structured.
 
-🔗 **Live:** _add your Vercel link here_
+Round-by-round interview experiences from students who actually sat the process, built for **Amrita Vishwa Vidyapeetham, Amaravati campus**.
 
----
+[![Live](https://img.shields.io/badge/live-placeport--lime.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://placeport-lime.vercel.app/)
 
-## 🚀 Key Features
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth%20%2B%20RLS-3ECF8E?logo=supabase&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-Vitest%20%2B%20Playwright-6E9F18)
 
-### 1. Access and Verified Identity
-- **Amaravati-only access**: Sign-in is restricted to `@av.students.amrita.edu` emails through a passwordless magic link. Other domains, including Gmail, are rejected.
-- **Login-only**: Every page requires authentication, and nothing is public.
-- **Roll number from your college email**: Emails follow the format `av.sc.u4cse2xxxx@av.students.amrita.edu`. The roll number (e.g. `AV.SC.U4CSE24106`), branch and batch year are read from the email, saved to your profile on first login, and cannot be edited.
-- **Verified authorship**: Every post shows the author's roll number from their verified profile. Nobody can post under someone else's roll number, and this is enforced in the database.
-
-### 2. Share Your Experience
-- Company, role, year, branch, package range (LPA) and outcome (`selected`, `rejected`, `waitlisted`, `no_offer`).
-- **Round builder**: Add rounds in any order (Online Assessment, GD, Technical, HR, or your own) and drag them to reorder. Each round has its own details.
-- Structured **Do's**, **Don'ts** and **Helpful Resources** (links).
-- Overall experience and preparation tips.
-
-### 3. Browse and Learn
-- **Feed**: Compact cards showing company, role, outcome, year, branch, package, rounds and a short summary.
-- **Detail page** (`/experiences/[id]`): Opens the full experience with every round in order, the do's and don'ts, resources, author and date.
-- **Filters**: Search, company, branch, year, outcome, and sort by most recent or most helpful. Filters are kept in the URL, so refreshing the page or sharing a link keeps them.
-- **Helpful votes and saves**: Mark posts as helpful and bookmark them for later.
-
-### 4. Roadmap
-- Merit badges and a "helped X students" counter
-- Company summary pages with common round flows
-- Ranked resources catalog
-- Report and moderation dashboard for admins
-- In-app notifications
-
-> Please don't post confidential company material or question papers covered by an NDA. Share experiences and preparation advice only.
+</div>
 
 ---
 
-## 🛠 Tech Stack
+## Table of Contents
 
-- **Framework**: Next.js 16 (App Router) with TypeScript
-- **Styling and UI**: Tailwind CSS v4, shadcn/ui, Lucide Icons
-- **Data fetching**: TanStack React Query v5
-- **Forms**: React Hook Form + Zod
-- **Drag and drop**: @dnd-kit/core and @dnd-kit/sortable
-- **Database and Auth**: Supabase (PostgreSQL, Row Level Security, magic link auth)
-- **Testing**: Vitest, React Testing Library, Playwright
-- **Hosting**: Vercel
+- [Why PlacePort](#why-placeport)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Authentication](#authentication)
+- [Security and Privacy](#security-and-privacy)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Database Setup](#database-setup)
+- [Scripts](#scripts)
+- [Testing](#testing)
+- [Project Structure](#project-structure)
+- [Deployment](#deployment)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Author](#author)
 
 ---
 
-## 🧱 Architecture
+## Why PlacePort
 
-The code is layered so each part has one job:
+Placement knowledge on campus lives in WhatsApp forwards and memory. PlacePort gives anyone who has faced an interview (selected or not) a structured place to document the rounds, the questions, what worked, what to avoid, and which resources helped, so the next batch prepares with signal instead of noise.
 
-- **UI components** only render. They never call Supabase directly.
-- **`lib/auth`**: An `AuthService` interface with one Supabase implementation, so the auth provider can be swapped in one place.
-- **`lib/services`**: `experienceService` and `profileService` are the only files that talk to the database.
-- **`lib/validation.ts`**: Email checks and `parseRollNumber()`, which turns an Amrita email into a roll number, branch and batch year.
-- **`lib/config.ts`**: Constants such as the allowed email domain and the campus name.
-- **`lib/types.ts`**: Shared types (`Experience`, `Round`, `Profile`).
+It is not a senior-to-junior mentoring model. Every experience is first-class.
 
+> Please do not post confidential company material or NDA-covered question papers. Share experiences and preparation advice only.
+
+## Features
+
+**Sharing**
+- Structured posts: company, role, year, branch, package range (LPA) and outcome.
+- **Round builder** with drag-and-drop ordering (`@dnd-kit`). Contributors define rounds in their own order, so pipelines that start with a GD or an online assessment are represented accurately.
+- Do's, don'ts, helpful resource links, overall experience and preparation tips.
+
+**Discovery**
+- Feed of experience cards with search and filters (company, branch, year, outcome) and sorting.
+- Full detail page per experience (`/experiences/[id]`) showing every round in order.
+- Company pages with an aggregated summary (`/company/[slug]`).
+- Resources catalogue, saved posts, and contributor profile pages.
+
+**Community**
+- Helpful votes and bookmarks.
+- Contributor badges and in-app notifications.
+- Authors are shown by **masked roll number** rather than name, so people who prefer privacy can still contribute.
+
+**Moderation (admin)**
+- Admin console to manage the approved roll-number roster, review user reports, hide or delete posts, manage users and reset passwords.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    B[Browser] --> M[Next.js middleware<br/>session + route guard]
+    M --> P[App Router pages<br/>React 19 + TanStack Query]
+    P --> API[Route Handlers /api/*]
+    API --> SVC[lib/services]
+    SVC --> SB[(Supabase<br/>Postgres + Auth + RLS)]
+    API -. admin only .-> SR[Service-role client<br/>server-side]
+    SR --> SB
 ```
-placeport/
-├── app/               # Routes: login, feed, share, experience detail, auth callback
-├── components/        # LoginForm, ExperienceCard, ExperienceDetail, RoundList, RoundEditor, ui/
-├── lib/
-│   ├── auth/          # AuthService interface + Supabase implementation
-│   ├── services/      # experienceService, profileService
-│   ├── validation.ts  # email + roll number parsing
-│   ├── config.ts      # allowed domain, campus
-│   └── types.ts
-├── types/             # Generated database types
-└── __tests__/         # Unit and e2e tests
+
+- **UI components** render only; data access goes through hooks and route handlers.
+- **`lib/services`** (`experienceService`, `profileService`, `rollNumberService`) are the layer that talks to the database.
+- **`lib/auth`** exposes an `AuthService` interface with a Supabase implementation, so the provider can be swapped in one place.
+- **Validation** uses Zod schemas (`lib/validations`) shared between forms and API routes.
+- **Mock mode:** when Supabase variables are missing or contain `placeholder`, the app falls back to an in-memory store (`lib/mockStore.ts`) so you can run the UI locally with no backend.
+
+## Authentication
+
+Students sign in with **roll number + password**. There are no email flows for students.
+
+```mermaid
+sequenceDiagram
+    participant S as Student
+    participant API as /api/auth/signup
+    participant DB as Supabase
+    S->>API: roll number + password
+    API->>API: Rate limit (5 attempts / 10 min / IP)
+    API->>API: Validate roll number format
+    API->>DB: Check valid_roll_numbers eligibility
+    DB-->>API: eligible
+    API->>DB: Create auth user (internal synthetic email)
+    DB-->>S: Session
 ```
 
----
+- Each roll number maps to an **internal synthetic email** (`<roll>@placeport.invalid`) that is never shown in the UI, which lets Supabase Auth handle passwords while students never deal with email.
+- Roll numbers follow the Amrita format, e.g. `AV.SC.U4CSE24106`, and are parsed into branch and batch year.
+- The **admin** signs in separately at `/admin/login` with a real email.
 
-## ⚙️ Getting Started
+## Security and Privacy
 
-### 1. Clone and install
+- **Row Level Security** is enabled on all tables, so authorization is enforced in the database, not just the UI.
+- Users can edit or delete only their own content.
+- Sensitive operations (admin roster, users, moderation) run in server route handlers using the service-role key, which is **never exposed to the browser**.
+- Auth endpoints are **rate limited**.
+- Public roll numbers are masked in the UI.
+
+> **Note:** the rate limiter is in-memory, so on serverless platforms the limit applies per instance. Use a shared store (e.g. Redis) if you need strict global limits.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router), React 19, TypeScript |
+| Styling / UI | Tailwind CSS v4, shadcn/ui (Radix + Base UI), Lucide, Sonner |
+| Data fetching | TanStack Query v5 |
+| Forms / validation | React Hook Form + Zod |
+| Drag and drop | dnd-kit |
+| Backend | Supabase (PostgreSQL, Auth, RLS) |
+| Testing | Vitest, Testing Library, Playwright |
+| Hosting | Vercel |
+
+## Getting Started
+
+**Prerequisites:** Node.js 20+, npm, and a Supabase project (optional for a UI-only run thanks to mock mode).
 
 ```bash
 git clone https://github.com/MadhuriChowdary73/Placeport.git
 cd Placeport
-npm install --legacy-peer-deps
+npm install        # .npmrc already sets legacy-peer-deps
+npm run dev
 ```
 
-### 2. Environment variables
+Open [http://localhost:3000](http://localhost:3000).
 
-Create `.env.local` in the project root:
+## Environment Variables
+
+Create `.env.local`:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-key
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-publishable-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>   # server only, required for admin routes
 ```
 
-Use the **publishable** (anon) key from Supabase → Project Settings → API Keys. Never put the secret or `service_role` key in this app, and never commit `.env.local`.
+> Never commit `.env.local`, never prefix the service-role key with `NEXT_PUBLIC_`, and never expose it to the client.
 
-### 3. Database setup
+## Database Setup
 
-Run the SQL setup script in Supabase → **SQL Editor**. It creates:
+1. Create a project in the [Supabase dashboard](https://supabase.com/dashboard).
+2. Open **SQL Editor** and run `supabase/complete_setup.sql`. It creates the core tables, the helpful-vote trigger, and the RLS policies. Apply the `migration_*.sql` files if your database predates them.
+3. Create the `valid_roll_numbers` table (`roll_number`, optional `branch`, `batch`, `created_at`) and add approved roll numbers, or manage them from the admin console at `/admin/roll-numbers`.
+4. Create the admin user in Supabase Auth with a real email, and set it as `ADMIN_EMAIL` in `lib/config.ts`.
 
-| Object | Purpose |
+## Scripts
+
+| Command | Purpose |
 |---|---|
-| `profiles` | One row per verified student (roll number, branch, batch year) |
-| `experiences` | Posts, with rounds, do's, don'ts and resources stored as structured fields |
-| `saves` | Bookmarks |
-| `helpful_votes` | Helpful votes, which update `helpful_count` through a trigger |
-| `experiences_with_author` | A view that adds the author's roll number (no emails exposed) |
+| `npm run dev` | Development server |
+| `npm run build` | Production build (webpack) |
+| `npm start` | Serve the production build |
+| `npm run lint` | ESLint |
+| `npm test` | Unit tests (Vitest) |
+| `npm run test:e2e` | End-to-end tests (Playwright) |
 
-### 4. Supabase auth settings
+## Testing
 
-In Supabase → **Authentication → URL Configuration**:
+- **Unit:** `__tests__/` (Vitest + Testing Library, jsdom).
+- **E2E:** `e2e/auth.spec.ts` (Playwright).
 
-- **Site URL**: `http://localhost:3000` (use your live link in production)
-- **Redirect URLs**: `http://localhost:3000/auth/callback` and `https://your-live-link/auth/callback`
+## Project Structure
 
-For real use, set up custom SMTP under **Authentication → Emails → SMTP Settings**, because Supabase's built-in email has a low hourly limit.
-
-### 5. Run
-
-```bash
-npm run dev      # development at http://localhost:3000
-npm test         # unit tests
-npm run build    # production build
-npm start        # run the production build
+```
+placeport/
+├── app/
+│   ├── (app)/          # feed, experiences, company, post, profile, resources, saved, notifications
+│   ├── (auth)/         # login
+│   ├── admin/          # admin login + reports, roll-numbers, users
+│   └── api/            # route handlers: auth, posts, votes, saves, badges, reports, admin/*
+├── components/         # auth, experience, post, ui (shadcn)
+├── lib/
+│   ├── auth/           # AuthService interface + Supabase implementation
+│   ├── services/       # experience, profile, rollNumber
+│   ├── supabase/       # browser + server clients
+│   ├── validations/    # Zod schemas
+│   ├── config.ts       # campus, branches, batch years, admin email
+│   ├── rateLimit.ts
+│   └── mockStore.ts    # in-memory fallback when Supabase is not configured
+├── supabase/           # SQL setup and migrations
+├── types/              # database types
+├── __tests__/  e2e/    # tests
+└── middleware.ts       # session refresh + route protection
 ```
 
----
+## Deployment
 
-## 🚢 Deployment (Vercel)
+Deployed on **Vercel**.
 
-1. Push the repo to GitHub.
-2. Import it in Vercel and add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as environment variables.
-3. Deploy, then add the live URL and `/auth/callback` to Supabase's Site URL and Redirect URLs.
+1. Import the GitHub repo in Vercel.
+2. Add the three environment variables under **Project Settings → Environment Variables**.
+3. Deploy. Pushes to `main` ship to production and every branch gets a preview URL.
 
----
+## Roadmap
 
-## 🔒 Security and Privacy
+- [ ] Shared-store rate limiting for serverless
+- [ ] Full-text search across companies, roles and keywords
+- [ ] Richer per-company analytics (common rounds, frequent topics)
+- [ ] Multi-campus support
 
-- **Row Level Security** is enabled on every table.
-- Only users whose verified email ends with `@av.students.amrita.edu` can create profiles, posts, saves or votes.
-- A profile's roll number must match its verified email, which the database checks. Profiles are read-only after creation, so roll numbers can't be changed or spoofed.
-- Users can edit or delete only their own posts, and posts are always created for the Amaravati campus.
-- The author view runs with the viewer's permissions (`security_invoker`) and exposes no email addresses.
-- Anonymous visitors have no access to any data.
+## Contributing
+
+1. Fork the repo and create a branch: `git checkout -b feat/your-feature`
+2. Commit with [Conventional Commits](https://www.conventionalcommits.org/): `git commit -m "feat: add your feature"`
+3. Run `npm run lint && npm test` before opening a PR.
+
+## Author
+
+**Madhuri Chowdary** · B.Tech CSE, Amrita Vishwa Vidyapeetham, Amaravati
+[GitHub](https://github.com/MadhuriChowdary73)
