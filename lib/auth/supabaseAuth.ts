@@ -29,6 +29,7 @@ export class SupabaseAuthService implements AuthService {
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
+            hd: 'av.students.amrita.edu',
           },
         },
       })

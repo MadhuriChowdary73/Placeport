@@ -94,11 +94,20 @@ export default function AuthCallbackPage() {
       setStatus('Syncing profile…')
 
       try {
-        await fetch('/api/auth/sync-profile', {
+        const res = await fetch('/api/auth/sync-profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: user.id, email }),
         })
+        if (!res.ok) {
+          const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+          const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+          if (url && key) {
+            await createBrowserClient(url, key).auth.signOut()
+          }
+          window.location.href = '/?error=domain_not_allowed'
+          return
+        }
       } catch (syncErr) {
         console.warn('[AuthCallback] Profile sync notice:', syncErr)
       }

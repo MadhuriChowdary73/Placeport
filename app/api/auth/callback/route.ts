@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { ADMIN_EMAIL } from '@/lib/config'
-import { parseRollNumber, extractRollNumber } from '@/lib/validation'
+import { checkAllowedGoogleAccount } from '@/lib/validation'
 import type { Database } from '@/types/database'
 
 export async function GET(req: NextRequest) {
@@ -34,14 +33,19 @@ export async function GET(req: NextRequest) {
     if (!error && data?.user) {
       const user = data.user
       const email = (user.email || '').toLowerCase().trim()
-      const isAdmin = email === ADMIN_EMAIL.toLowerCase()
+      const check = checkAllowedGoogleAccount(email, process.env.ADMIN_EMAIL)
 
-      // Parse roll number from Amrita student email if applicable
-      const parsed = parseRollNumber(email)
-      const fallbackRoll = extractRollNumber(email)
-      const rollNumber = isAdmin
-        ? 'ADMIN'
-        : parsed?.rollNumber || (fallbackRoll.valid ? fallbackRoll.rollNumber : email.split('@')[0].toUpperCase())
+      if (!check.allowed) {
+        await supabase.auth.signOut()
+        const deniedResponse = NextResponse.redirect(`${origin}/?error=domain_not_allowed`)
+        cookieStore.forEach(({ name, value, options }) => deniedResponse.cookies.set(name, value, options))
+        req.cookies.getAll().forEach(({ name }) => {
+          if (name.startsWith('sb-')) {
+            deniedResponse.cookies.set(name, '', { maxAge: 0, path: '/' })
+          }
+        })
+        return deniedResponse
+      }
 
       const fullName = user.user_metadata?.full_name || user.user_metadata?.name || null
 
@@ -52,10 +56,10 @@ export async function GET(req: NextRequest) {
             id: user.id,
             email,
             full_name: fullName,
-            roll_number: rollNumber,
-            branch: isAdmin ? 'ADMIN' : parsed?.branch || 'CSE',
-            batch: isAdmin ? 2024 : (parsed?.batchYear ? 2000 + parsed.batchYear : 2025),
-            role: isAdmin ? 'admin' : 'student',
+            roll_number: check.rollNumber,
+            branch: check.branch,
+            batch: check.batchYear,
+            role: check.isAdmin ? 'admin' : 'student',
             status: 'approved',
             updated_at: new Date().toISOString(),
           },

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { ADMIN_EMAIL } from '@/lib/config'
 import { revalidatePath } from 'next/cache'
 import { toggleExperiencePublishStatus } from '@/lib/services/experienceService'
 
@@ -18,7 +17,8 @@ export async function POST(
 
     const { id: postId } = await params
     const email = user.email.toLowerCase().trim()
-    let isAdmin = email === ADMIN_EMAIL.toLowerCase()
+    const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+    let isAdmin = Boolean(adminEmail && email === adminEmail)
 
     if (!isAdmin) {
       // Check profile role

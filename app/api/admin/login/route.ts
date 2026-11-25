@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { ADMIN_EMAIL } from '@/lib/config'
 import { checkRateLimit } from '@/lib/rateLimit'
 import type { Database } from '@/types/database'
 
@@ -22,18 +21,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Email and password are required' }, { status: 400 })
     }
 
-    // Only allow designated admin email
-    if (email !== ADMIN_EMAIL.toLowerCase()) {
-      return NextResponse.json({ ok: false, error: 'Invalid admin credentials' }, { status: 401 })
-    }
-
-    if (password !== 'Madhuri_73') {
+    // Only allow designated admin email configured server-side
+    const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+    if (!adminEmail || email !== adminEmail) {
       return NextResponse.json({ ok: false, error: 'Invalid admin credentials' }, { status: 401 })
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json({ ok: false, error: 'Server configuration error' }, { status: 500 })
@@ -52,64 +47,28 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Attempt sign-in with Supabase Auth
-    let { data, error } = await supabase.auth.signInWithPassword({ email, password })
-
-    // Auto-create/confirm admin user if not present
-    if (error) {
-      if (serviceRoleKey && !serviceRoleKey.includes('placeholder')) {
-        try {
-          const { createClient: createSupabaseJsClient } = await import('@supabase/supabase-js')
-          const adminClient = createSupabaseJsClient<Database>(supabaseUrl, serviceRoleKey, {
-            auth: { autoRefreshToken: false, persistSession: false },
-          })
-          await adminClient.auth.admin.createUser({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: { roll_number: 'ADMIN', role: 'admin' },
-          })
-        } catch (createErr) {
-          console.warn('[AdminLoginAPI] Service role create note:', createErr)
-        }
-      } else {
-        await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { roll_number: 'ADMIN', role: 'admin' } },
-        })
-      }
-
-      const retry = await supabase.auth.signInWithPassword({ email, password })
-      data = retry.data
-      error = retry.error
-    }
+    // Authenticate with real Supabase Auth
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error || !data?.user) {
-      return NextResponse.json({ ok: false, error: error?.message || 'Admin authentication failed' }, { status: 401 })
+      return NextResponse.json({ ok: false, error: 'Invalid admin credentials' }, { status: 401 })
     }
 
-    const user = data.user
+    // Confirm the profile row has role = 'admin'
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .maybeSingle()
 
-    // Ensure profiles.role is 'admin'
-    try {
-      await (supabase.from('profiles' as any) as any).upsert(
-        {
-          id: user.id,
-          roll_number: 'ADMIN',
-          branch: 'ADMIN',
-          batch: 2024,
-          role: 'admin',
-          status: 'approved',
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      )
-    } catch (profErr) {
-      console.warn('[AdminLoginAPI] Profile note:', profErr)
+    if (profileError || (profile as any)?.role !== 'admin') {
+      await supabase.auth.signOut()
+      const res = NextResponse.json({ ok: false, error: 'Invalid admin credentials' }, { status: 401 })
+      cookieStore.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
+      return res
     }
 
-    const res = NextResponse.json({ ok: true, role: 'admin', email: ADMIN_EMAIL })
+    const res = NextResponse.json({ ok: true, role: 'admin', email: adminEmail })
     cookieStore.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
     return res
   } catch (err: any) {

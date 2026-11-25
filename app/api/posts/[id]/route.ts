@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isMockMode, getMockPostById, deleteMockPost } from '@/lib/mockStore'
-import { ADMIN_EMAIL } from '@/lib/config'
 import { deleteExperience } from '@/lib/services/experienceService'
 
 // GET /api/posts/[id]
@@ -54,7 +53,8 @@ export async function DELETE(
   if (!user || !user.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const email = user.email.toLowerCase().trim()
-  let isAdmin = email === ADMIN_EMAIL.toLowerCase()
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+  let isAdmin = Boolean(adminEmail && email === adminEmail)
   if (!isAdmin) {
     const { data: profile } = await supabase
       .from('profiles' as any)

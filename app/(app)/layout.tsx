@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { ADMIN_EMAIL } from '@/lib/config'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const userEmail = (user?.email || '').toLowerCase()
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
   let isAdmin = false
   let profile: any = null
 
@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .eq('id', user.id)
       .maybeSingle()
     profile = data
-    isAdmin = (profile as any)?.role === 'admin' || userEmail === ADMIN_EMAIL.toLowerCase()
+    isAdmin = (profile as any)?.role === 'admin' || Boolean(adminEmail && userEmail === adminEmail)
   }
 
   const name = user?.user_metadata?.full_name || user?.user_metadata?.name || ''
@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const displayLabel = !user
     ? 'Visitor'
     : isAdmin
-    ? `Administrator (${ADMIN_EMAIL})`
+    ? `Administrator (${userEmail || adminEmail})`
     : name
     ? `${name} (${rollNumber.toUpperCase()})`
     : `Student (${rollNumber.toUpperCase()})`

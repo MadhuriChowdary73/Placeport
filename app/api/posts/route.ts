@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { postSchema } from '@/lib/validations/post'
 import { revalidatePath } from 'next/cache'
-import { ADMIN_EMAIL } from '@/lib/config'
 import { getExperiences, createExperience } from '@/lib/services/experienceService'
 
 // GET /api/posts
@@ -22,9 +21,10 @@ export async function GET(req: NextRequest) {
   const limit = 20
 
   let isAdmin = false
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
   if (user) {
     const email = (user.email || '').toLowerCase().trim()
-    isAdmin = email === ADMIN_EMAIL.toLowerCase()
+    isAdmin = Boolean(adminEmail && email === adminEmail)
     if (!isAdmin) {
       const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
       if ((userProfile as any)?.role === 'admin') {
@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
   }
 
   const userEmail = (user.email || '').toLowerCase().trim()
-  const isAdminPoster = userEmail === ADMIN_EMAIL.toLowerCase()
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+  const isAdminPoster = Boolean(adminEmail && userEmail === adminEmail)
 
   // Fetch author profile
   const { data: profile } = await supabase

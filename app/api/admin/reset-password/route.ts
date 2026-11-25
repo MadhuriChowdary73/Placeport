@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
     }
 
     const userEmail = (user.email || '').toLowerCase()
-    const isMasterAdmin = userEmail === 'madhurichowdary2007@gmail.com'
+    const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+    const isMasterAdmin = Boolean(adminEmail && userEmail === adminEmail)
 
     if (!isMasterAdmin) {
       const { data: profile } = await supabase

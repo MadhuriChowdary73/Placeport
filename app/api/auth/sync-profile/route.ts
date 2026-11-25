@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { ADMIN_EMAIL } from '@/lib/config'
-import { parseRollNumber, extractRollNumber } from '@/lib/validation'
+import { checkAllowedGoogleAccount } from '@/lib/validation'
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,29 +15,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user credentials' }, { status: 400 })
     }
 
-    const isAdmin = email === ADMIN_EMAIL.toLowerCase()
-    const parsed = parseRollNumber(email)
-    const fallbackRoll = extractRollNumber(email)
-    const rollNumber = isAdmin
-      ? 'ADMIN'
-      : parsed?.rollNumber || (fallbackRoll.valid ? fallbackRoll.rollNumber : email.split('@')[0].toUpperCase())
+    const check = checkAllowedGoogleAccount(email, process.env.ADMIN_EMAIL)
+    if (!check.allowed) {
+      await supabase.auth.signOut()
+      return NextResponse.json({ ok: false, error: 'domain_not_allowed' }, { status: 403 })
+    }
 
     await (supabase.from('profiles' as any) as any).upsert(
       {
         id: userId,
         email: email,
         full_name: user?.user_metadata?.full_name || user?.user_metadata?.name || null,
-        roll_number: rollNumber,
-        branch: isAdmin ? 'ADMIN' : parsed?.branch || 'CSE',
-        batch_year: isAdmin ? 24 : parsed?.batchYear || 24,
-        role: isAdmin ? 'admin' : 'student',
+        roll_number: check.rollNumber,
+        branch: check.branch,
+        batch: check.batchYear,
+        role: check.isAdmin ? 'admin' : 'student',
         status: 'approved',
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }
     )
 
-    return NextResponse.json({ ok: true, rollNumber, role: isAdmin ? 'admin' : 'student' })
+    return NextResponse.json({ ok: true, rollNumber: check.rollNumber, role: check.isAdmin ? 'admin' : 'student' })
   } catch (err: any) {
     console.error('[SyncProfile] Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

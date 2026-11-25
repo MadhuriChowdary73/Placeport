@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { auth } from '@/lib/auth'
 
-export function LoginForm() {
+export function LoginForm({ initialError = null }: { initialError?: string | null }) {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError)
 
   async function handleGoogleSignIn() {
     setError(null)

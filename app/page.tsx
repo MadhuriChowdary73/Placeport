@@ -6,7 +6,17 @@ export const metadata: Metadata = {
   description: 'Placement interview experiences, preparation insights, and resources for Amrita Amaravati students.',
 }
 
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const params = await searchParams
+  const initialError =
+    params?.error === 'domain_not_allowed'
+      ? 'Please sign in with your Amrita student email'
+      : null
+
   return (
     <div className="min-h-screen flex flex-col justify-between bg-[#FAF9F6]">
       {/* Top Brand Stripe */}
@@ -52,7 +62,7 @@ export default function HomePage() {
 
           {/* Right: Auth Form (Always clean, no pre-filled or cached defaults) */}
           <div className="flex items-center justify-center">
-            <LoginForm />
+            <LoginForm initialError={initialError} />
           </div>
 
         </div>

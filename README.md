@@ -158,6 +158,7 @@ Create `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-publishable-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>   # server only, required for admin routes
+ADMIN_EMAIL=admin@example.com                       # server only, designated admin email
 ```
 
 > Never commit `.env.local`, never prefix the service-role key with `NEXT_PUBLIC_`, and never expose it to the client.

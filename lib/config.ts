@@ -31,9 +31,6 @@ export function isSyntheticEmail(email: string): boolean {
   return (email || '').toLowerCase().endsWith(`@${SYNTHETIC_EMAIL_DOMAIN}`)
 }
 
-/** Admin account allowed to log in via /admin/login */
-export const ADMIN_EMAIL = 'madhurichowdary2007@gmail.com'
-
 /** Legacy college email domain (only for validation backwards-compat) */
 export const ALLOWED_EMAIL_DOMAIN = 'av.students.amrita.edu'
 

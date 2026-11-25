@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { ADMIN_EMAIL } from '@/lib/config'
 import { revalidatePath } from 'next/cache'
 
 export async function DELETE(
@@ -17,7 +16,8 @@ export async function DELETE(
 
     const { id: postId } = await params
     const email = user.email.toLowerCase().trim()
-    const isAdmin = email === ADMIN_EMAIL.toLowerCase()
+    const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+    const isAdmin = Boolean(adminEmail && email === adminEmail)
 
     if (!isAdmin) {
       const { data: profile } = await supabase

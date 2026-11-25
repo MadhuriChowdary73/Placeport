@@ -6,7 +6,17 @@ export const metadata: Metadata = {
   description: 'Sign in to PlacePort to access placement interview experiences for Amrita Amaravati students.',
 }
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const params = await searchParams
+  const initialError =
+    params?.error === 'domain_not_allowed'
+      ? 'Please sign in with your Amrita student email'
+      : null
+
   return (
     <div className="min-h-screen flex flex-col justify-between bg-[#FAF9F6]">
       {/* Top Brand Stripe */}
@@ -52,7 +62,7 @@ export default function LoginPage() {
 
           {/* Right: Auth Form */}
           <div className="flex items-center justify-center">
-            <LoginForm />
+            <LoginForm initialError={initialError} />
           </div>
 
         </div>

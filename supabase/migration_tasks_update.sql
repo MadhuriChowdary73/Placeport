@@ -1,3 +1,4 @@
+-- DEPRECATED: Replaced by supabase/complete_setup.sql. Do not run directly.
 -- ==============================================================================
 -- PlacePort: Migration for Tasks 2, 3, 4
 -- Run this in the Supabase SQL Editor (Dashboard -> SQL Editor -> New Query)

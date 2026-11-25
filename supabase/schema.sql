@@ -1,3 +1,4 @@
+-- DEPRECATED: Replaced by supabase/complete_setup.sql. Do not run directly.
 -- ==============================================================================
 -- PlacePort: Profiles Table & Row Level Security (RLS) Policies
 -- Enforces:
